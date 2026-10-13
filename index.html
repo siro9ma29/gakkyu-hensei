@@ -25,6 +25,7 @@ input[type=text],input[type=number],input[type=date],select,textarea{border:1px 
 textarea{width:100%;min-height:54px;resize:vertical}
 .top{display:flex;align-items:center;gap:12px;padding:10px 18px;background:#24313d;color:#fff;flex-wrap:wrap}
 .top h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.04em}
+.top .ver{font-size:11px;font-weight:700;letter-spacing:.03em;padding:1px 8px;border-radius:10px;background:#e8b923;color:#1f2328;cursor:default}
 .top .file{font-size:12px;color:#c9d3dc}
 .top .dirty{color:#ffd84d;font-weight:700}
 .top .sp{flex:1}
@@ -173,6 +174,7 @@ table.pt td.c,table.pt th.c{text-align:center}
 <body>
 <header class="top">
   <h1>学級編制アプリ</h1>
+  <span class="ver" id="verBadge"></span>
   <span class="file" id="fileInfo">データ未読込</span>
   <span class="sp"></span>
   <button id="btnNew">新規</button>
@@ -199,7 +201,7 @@ table.pt td.c,table.pt th.c{text-align:center}
 <script>
 'use strict';
 /* =====================================================================
-   学級編制アプリ  ver.1.0
+   学級編制アプリ  ver.1.1
    ・データは JSON ファイルで保存（ブラウザ内には保存しない）
    ・判定ルールは「就学前引継ぎ 聞き取りシート」の【聞き取り後の処理】に準拠
      配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
@@ -209,7 +211,8 @@ table.pt td.c,table.pt th.c{text-align:center}
    ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
    ===================================================================== */
 
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
+const APP_UPDATED = '2026-10-13';
 const MARKS = ['', 'なし', '○', '◎'];
 const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
 const A_ITEMS = [
@@ -1239,7 +1242,7 @@ function renderHelp(v){
     <tr><th>確定レベル</th><td>シートの「配慮レベル（確定）」「保護者対応レベル（確定）」が新しい自動判定と違う場合は、確定値として引き継ぎます。</td></tr>
     <tr><th>人間関係</th><td>氏名を名簿と照合します（全角・半角スペースや 邉／辺、髙／高 などの違いは同じとみなします）。照合できなかった名前は①児童データの上部に一覧で出ます。</td></tr>
   </table>
-  <p class="muted">学級編制アプリ ver.${APP_VERSION}　／　インターネット接続なしで動作します（Microsoft Edge・Google Chrome 推奨）。</p></div>`;
+  <p class="muted">学級編制アプリ ver.${APP_VERSION}（${APP_UPDATED} 更新）　／　インターネット接続なしで動作します（Microsoft Edge・Google Chrome 推奨）。</p></div>`;
 }
 
 /* =====================================================================
@@ -1339,6 +1342,7 @@ $('#fileJson').onchange=async e=>{
   try{ loadJson(await f.text(), f.name); tab='data'; render(); toast('読み込みました：'+f.name); }
   catch(err){ alert('読み込みに失敗しました：\n'+err.message); }
 };
+{ const vb=$('#verBadge'); vb.textContent='ver.'+APP_VERSION; vb.title='学級編制アプリ ver.'+APP_VERSION+'（'+APP_UPDATED+' 更新）'; }
 window.addEventListener('beforeunload',e=>{ if(dirty && S.students.length){ e.preventDefault(); e.returnValue=''; } });
 render();
 </script>

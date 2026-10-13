@@ -1,5 +1,7 @@
 # 学級編制アプリ
 
+![version](https://img.shields.io/badge/version-1.1-e8b923)
+
 新1年生の学級編制を行う、オフラインで動く1ファイルのHTMLアプリです（`index.html`）。
 Microsoft Edge / Google Chrome でファイルを開くだけで使えます。
 
@@ -16,3 +18,7 @@ Microsoft Edge / Google Chrome でファイルを開くだけで使えます。
 
 ## 注意
 児童の個人情報を含むデータ（JSON・Excel・印刷PDF）は、このリポジトリに入れないでください。`.gitignore` で除外しています。
+
+## 更新履歴
+- ver.1.1（2026-10-13）入力用Excel（原版）の出力機能、バージョン表示を追加
+- ver.1.0（2026-10-13）初版
