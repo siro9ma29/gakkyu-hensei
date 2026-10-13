@@ -1,0 +1,1331 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>学級編制アプリ</title>
+<style>
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --ink:#1f2328; --sub:#5b6168; --line:#d9d6cf; --line2:#ebe8e1;
+  --accent:#1d5c8f; --accent-weak:#e3eef7; --ok:#1d7a3e; --ok-weak:#e4f3e8; --ng:#b3261e; --ng-weak:#fbe7e5;
+  --warn:#9a6200; --warn-weak:#fdf1d8; --male:#2f6fae; --female:#c0436b; --sel:#ffd84d;
+  --input:#fffbe6;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"BIZ UDPGothic","BIZ UDGothic","Meiryo","Yu Gothic UI","Yu Gothic","Hiragino Sans",sans-serif;font-size:14px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px}
+button:hover{background:#f1f0eb}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:hover{background:#174b75}
+button.danger{color:var(--ng);border-color:#e3b4b0}
+button.small{padding:2px 8px;font-size:12px}
+button:disabled{opacity:.45;cursor:default}
+input[type=text],input[type=number],input[type=date],select,textarea{border:1px solid var(--line);border-radius:5px;padding:5px 7px;background:#fff}
+textarea{width:100%;min-height:54px;resize:vertical}
+.top{display:flex;align-items:center;gap:12px;padding:10px 18px;background:#24313d;color:#fff;flex-wrap:wrap}
+.top h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.04em}
+.top .file{font-size:12px;color:#c9d3dc}
+.top .dirty{color:#ffd84d;font-weight:700}
+.top .sp{flex:1}
+.top button{background:#33475a;border-color:#4a6075;color:#fff}
+.top button:hover{background:#3d566c}
+.top button.primary{background:#e8b923;border-color:#e8b923;color:#1f2328;font-weight:700}
+.tabs{display:flex;gap:2px;padding:0 18px;background:#24313d;flex-wrap:wrap}
+.tabs button{border:none;border-radius:8px 8px 0 0;background:#3a4b5b;color:#dfe6ec;padding:8px 18px}
+.tabs button.on{background:var(--bg);color:var(--ink);font-weight:700}
+main{padding:16px 18px 60px;max-width:1500px;margin:0 auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.panel h2{font-size:15px;margin:0 0 10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--sub);font-size:12px}
+.badge{display:inline-block;border-radius:4px;padding:0 6px;font-size:12px;font-weight:700;line-height:18px;border:1px solid transparent}
+.lv1{background:#eef0f2;color:#5b6168}
+.lv2{background:var(--warn-weak);color:var(--warn);border-color:#ecd3a0}
+.lv3{background:var(--ng-weak);color:var(--ng);border-color:#e9b8b3}
+.ov{outline:2px dotted var(--accent);outline-offset:1px}
+table.grid{border-collapse:collapse;width:100%;background:#fff}
+table.grid th,table.grid td{border:1px solid var(--line2);padding:4px 6px;text-align:left;vertical-align:top}
+table.grid th{background:#f3f1ec;font-weight:700;font-size:12px;position:sticky;top:0;z-index:1}
+table.grid tr:hover td{background:#fafaf6}
+table.grid td.c,table.grid th.c{text-align:center}
+.clickable{cursor:pointer}
+.alert{border-radius:8px;padding:10px 12px;margin-bottom:12px;border:1px solid}
+.alert.warn{background:var(--warn-weak);border-color:#ecd3a0}
+.alert.ng{background:var(--ng-weak);border-color:#e9b8b3}
+.alert.ok{background:var(--ok-weak);border-color:#b9dfc4}
+.alert.info{background:var(--accent-weak);border-color:#b9d3e8}
+/* editor */
+dialog{border:none;border-radius:12px;padding:0;width:min(1040px,96vw);max-height:94vh;box-shadow:0 10px 40px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(20,28,36,.45)}
+.dlg-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:3}
+.dlg-head h3{margin:0;font-size:16px;flex:1}
+.dlg-body{padding:14px 16px}
+.sec{border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
+.sec>h4{margin:0;padding:6px 10px;background:#eef2f5;font-size:13px;display:flex;gap:8px;align-items:center}
+.sec>h4 .muted{font-weight:400}
+.sec .in{padding:8px 10px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px 12px}
+.fgrid label{display:flex;flex-direction:column;font-size:12px;color:var(--sub);gap:2px}
+.fgrid label input,.fgrid label select{color:var(--ink);font-size:14px}
+.item{display:grid;grid-template-columns:190px 170px 1fr;gap:8px;align-items:start;padding:5px 0;border-bottom:1px dashed var(--line2)}
+.item:last-child{border-bottom:none}
+.item .lb b{display:block;font-size:13px}
+.item .lb span{font-size:11px;color:var(--sub)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:none;border-right:1px solid var(--line);border-radius:0;padding:3px 9px;background:#fff;min-width:38px}
+.seg button:last-child{border-right:none}
+.seg button.on{background:var(--accent);color:#fff;font-weight:700}
+.seg button.on.m-dbl{background:var(--ng)}
+.seg button.on.m-sgl{background:var(--warn)}
+.seg button.on.m-none{background:#6b7680}
+.seg button.on.m-blank{background:#b9bec4}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:14px;padding:1px 4px 1px 10px;background:#fff;font-size:13px}
+.chip button{border:none;padding:0 6px;background:transparent;color:var(--sub)}
+.chip.apart{border-color:#e9b8b3;background:var(--ng-weak)}
+.chip.friend{border-color:#b9dfc4;background:var(--ok-weak)}
+.judge{display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:#f7f6f2;border-radius:8px;margin-bottom:12px}
+/* matrix */
+.mx-wrap{overflow:auto;max-height:72vh;border:1px solid var(--line);border-radius:8px;background:#fff}
+table.mx{border-collapse:separate;border-spacing:0}
+table.mx th,table.mx td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:2px 4px;text-align:center;white-space:nowrap}
+table.mx thead th{position:sticky;top:0;background:#f3f1ec;z-index:2;font-size:11px;vertical-align:bottom}
+table.mx thead th.hz{white-space:normal;width:44px;min-width:44px;max-width:52px;line-height:1.2;padding:4px 2px;font-size:11px;vertical-align:middle}
+table.mx thead tr:nth-child(2) th{top:23px}
+table.mx td.nm{text-align:left;position:sticky;left:0;background:#fff;z-index:1;min-width:150px}
+table.mx thead th.nm{left:0;z-index:3}
+table.mx td.mk{cursor:pointer;width:30px;height:28px;font-size:15px;user-select:none}
+table.mx td.mk:hover{background:var(--accent-weak)}
+td.mk.v-blank{color:#c4c7cb}
+td.mk.v-none{color:#6b7680}
+td.mk.v-sgl{color:var(--warn);font-weight:700;background:#fffaf0}
+td.mk.v-dbl{color:var(--ng);font-weight:700;background:#fff4f3}
+th.gA{background:#e9f0f6!important} th.gB{background:#eef5ea!important} th.gC{background:#f6f0e6!important} th.gE{background:#f3ecf4!important}
+/* board */
+.board{display:grid;gap:10px;align-items:start}
+.col{background:#fff;border:1px solid var(--line);border-radius:10px;min-height:200px;display:flex;flex-direction:column}
+.col.drop{outline:3px solid var(--accent);outline-offset:-3px;background:var(--accent-weak)}
+.col.target{cursor:copy}
+.col-head{padding:8px 10px;border-bottom:1px solid var(--line);background:#f3f1ec;border-radius:10px 10px 0 0}
+.col-head .t{font-weight:700;font-size:15px}
+.col-head .s{font-size:12px;color:var(--sub)}
+.col.unassigned .col-head{background:#f2f2f2}
+.col.special .col-head{background:#efeaf5}
+.cards{padding:6px;display:flex;flex-direction:column;gap:4px;flex:1}
+.card{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-left:5px solid #999;border-radius:6px;padding:3px 6px;background:#fff;cursor:grab;user-select:none}
+.card.m{border-left-color:var(--male)} .card.f{border-left-color:var(--female)}
+.card .nm{flex:1;min-width:0}
+.card .nm b{font-size:13px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .nm span{font-size:10px;color:var(--sub)}
+.card .tags{display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:10px;border-radius:3px;padding:0 3px;line-height:15px;border:1px solid var(--line);background:#fafafa;color:var(--sub)}
+.tag.p2{background:#eef3fb;color:#2f5f9a;border-color:#bcd0ea}
+.tag.p3{background:#2f5f9a;color:#fff;border-color:#2f5f9a}
+.tag.ld{background:#fff8d6;color:#7a5d00;border-color:#ead47c}
+.tag.ea{background:#f2ecfb;color:#5d3f8f;border-color:#d4c4ec}
+.card .lk{border:none;background:transparent;padding:0 2px;font-size:13px;opacity:.35}
+.card .lk.on{opacity:1}
+.card.locked{background:#f6f6f2}
+.card.sel{box-shadow:0 0 0 3px var(--sel)}
+.card.rel-f{box-shadow:0 0 0 2px var(--ok)}
+.card.rel-a{box-shadow:0 0 0 2px var(--ng)}
+.card.viol{background:var(--ng-weak)}
+.card.dragging{opacity:.4}
+table.sum td.ng{color:var(--ng);font-weight:700}
+table.sum td.okc{color:var(--ok);font-weight:700}
+table.sum tr.ngrow td{background:var(--ng-weak)}
+.detail{position:sticky;top:10px}
+.lay{display:grid;grid-template-columns:1fr 370px;gap:14px;align-items:start}
+@media (max-width:1100px){.lay{grid-template-columns:1fr}.detail{position:static}}
+.log{max-height:240px;overflow:auto;font-size:12px}
+/* print preview */
+.preview{background:#888;padding:16px;border-radius:8px;overflow:auto;max-height:75vh}
+.preview .page{background:#fff;width:210mm;min-height:297mm;margin:0 auto 12px;padding:12mm;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#printArea{display:none}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#24313d;color:#fff;padding:9px 18px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:99}
+.toast.show{opacity:1}
+/* printable content */
+.p-title{font-size:16pt;font-weight:700;margin:0 0 4mm}
+.p-sub{font-size:9pt;color:#444;margin-bottom:3mm}
+table.pt{border-collapse:collapse;width:100%;font-size:10pt}
+table.pt th,table.pt td{border:1px solid #555;padding:1.4mm 2mm;vertical-align:top;text-align:left}
+table.pt th{background:#e8e8e8;font-weight:700;white-space:nowrap}
+table.pt td.nw{white-space:nowrap}
+table.pt td.c,table.pt th.c{text-align:center}
+.band{padding:2mm 3mm;font-weight:700;font-size:12pt;border:1px solid #555;border-bottom:none;margin-top:5mm}
+.karte h5{font-size:11pt;margin:4mm 0 1.5mm;border-left:4px solid #333;padding-left:2mm}
+.karte table.pt th{width:30mm}
+.tanpyo{border:1.5px solid #333;padding:3mm;margin-bottom:5mm;break-inside:avoid;page-break-inside:avoid}
+.tanpyo table.pt{font-size:9pt}
+.tanpyo table.pt th{width:22mm;white-space:nowrap}
+.pb{break-after:page;page-break-after:always}
+@page{size:A4;margin:11mm}
+@media print{
+  body{background:#fff}
+  .top,.tabs,main,dialog,.toast{display:none!important}
+  #printArea{display:block}
+  .band{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  table.pt th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>学級編制アプリ</h1>
+  <span class="file" id="fileInfo">データ未読込</span>
+  <span class="sp"></span>
+  <button id="btnNew">新規</button>
+  <button id="btnImportXlsx">Excelから取込</button>
+  <button id="btnOpen">データを開く（JSON）</button>
+  <button id="btnSave" class="primary">保存（JSON）</button>
+  <input type="file" id="fileXlsx" accept=".xlsx,.xlsm" hidden>
+  <input type="file" id="fileJson" accept=".json,application/json" hidden>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="data">① 児童データ</button>
+  <button data-tab="matrix">② 園別一括入力</button>
+  <button data-tab="form">③ 編制・調整</button>
+  <button data-tab="print">④ 出力・印刷</button>
+  <button data-tab="settings">⑤ 設定</button>
+  <button data-tab="help">使い方</button>
+</nav>
+<main id="view"></main>
+<dialog id="dlg"></dialog>
+<div id="printArea"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   学級編制アプリ  ver.1.0
+   ・データは JSON ファイルで保存（ブラウザ内には保存しない）
+   ・判定ルールは「就学前引継ぎ 聞き取りシート」の【聞き取り後の処理】に準拠
+     配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
+                   ◎2以上→3 ／ ◎1 または ○3以上→2 ／ それ以外→1
+     保護者対応  ：E欄4項目（連絡・伝達・提出物・認識差）の ◎の数
+                   3以上→3 ／ 2以上→2 ／ それ以外→1
+   ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
+   ===================================================================== */
+
+const APP_VERSION = '1.0';
+const MARKS = ['', 'なし', '○', '◎'];
+const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
+const A_ITEMS = [
+  {k:'hyper',   l:'多動・注意散漫', s:'多動',   h:'集中が続かない／気が逸れる'},
+  {k:'leave',   l:'離席・行動の逸脱', s:'離席', h:'席や場を離れる／集団から離れる'},
+  {k:'instr',   l:'指示の理解', s:'指示理解',       h:'一斉指示で動けない／繰り返し必要'},
+  {k:'comm',    l:'コミュニケーション', s:'コミュ', h:'思いを言葉にできない／発話が少ない'},
+  {k:'kodawari',l:'こだわり・切り替え', s:'こだわり', h:'切り替えが難しい／勝ち負けへの固執'},
+  {k:'sense',   l:'感覚の過敏さ', s:'感覚',     h:'音・触覚・光・におい'},
+  {k:'emo',     l:'情緒・緊張', s:'情緒',       h:'泣く／強い不安／パニック'},
+  {k:'resp',    l:'支援への反応', s:'支援反応',     h:'声かけで戻れる／変化なし／支援を拒む'},
+];
+const B_ITEMS = [
+  {k:'toilet', l:'排せつ', s:'排せつ',         h:'失敗がある／和式が使えない／言えない'},
+  {k:'meal',   l:'食事', s:'食事',           h:'偏食が強い／時間がかかる／量が極端'},
+  {k:'dress',  l:'着替え・身支度', s:'着替え', h:'自分でできない／時間がかかる'},
+  {k:'tidy',   l:'片付け・整理', s:'片付け',   h:'自分の物を管理できない'},
+  {k:'health', l:'健康面', s:'健康',         h:'持病・服薬・アレルギー・発作・体力'},
+];
+const C_ITEMS = [
+  {k:'leader',  l:'リーダー性', s:'リーダー',     h:'自分から声をかける／まわりを引っ張る'},
+  {k:'trouble', l:'トラブルの傾向', s:'トラブル', h:'手が出る／言葉が強い／集団に入れない'},
+];
+const E_ITEMS = [
+  {k:'e_contact', l:'連絡・要望が多い', s:'連絡要望',                 h:'園への問い合わせや要望の多さ', judge:true},
+  {k:'e_comm',    l:'園からの伝達が通りにくい', s:'伝達',         h:'子どもの様子を伝えたときの受け止め', judge:true},
+  {k:'e_docs',    l:'提出物・持ち物・送迎に不備が多い', s:'提出物', h:'期限や準備が整っているか', judge:true},
+  {k:'e_gap',     l:'園の見立てと保護者の受け止めに差', s:'認識差', h:'発達や就学についての認識', judge:true},
+  {k:'e_consult', l:'就学・発達の相談歴', s:'相談歴',               h:'園・行政・医療機関等への相談', judge:false},
+];
+const LV_KEYS  = [...A_ITEMS, ...B_ITEMS].map(x=>x.k).concat(['trouble']);
+const PAR_KEYS = ['e_contact','e_comm','e_docs','e_gap'];
+const MARK_KEYS = [...A_ITEMS, ...B_ITEMS, ...C_ITEMS, ...E_ITEMS].map(x=>x.k);
+const DESTS = ['通常学級','特別支援（知的）','特別支援（情緒）','その他（対象外）'];
+
+function defaultSettings(){
+  return {
+    yearLabel:'', school:'', classCount:2, excludeSpecial:true,
+    crit:[
+      {k:'size',   l:'人数',                     w:12,  t:1},
+      {k:'male',   l:'男子',                     w:9,   t:1},
+      {k:'female', l:'女子',                     w:9,   t:1},
+      {k:'lvSum',  l:'配慮レベル 合計',          w:7,   t:2},
+      {k:'lv3',    l:'　うち配慮レベル3の人数',  w:6,   t:1},
+      {k:'lv2',    l:'　うち配慮レベル2の人数',  w:3,   t:2},
+      {k:'parSum', l:'保護者対応レベル 合計',    w:5.6, t:2},
+      {k:'par3',   l:'　うち保護者対応レベル3',  w:4,   t:1},
+      {k:'early',  l:'早生まれ（1/1〜4/1生）',   w:2,   t:2},
+      {k:'leader', l:'リーダー性あり（○・◎）',   w:3,   t:2},
+    ],
+    wArea:1, wEn:1, wFriend:20,
+    dismissal:[
+      {name:'ピンク',  area:'沼ノ端中央6丁目',    color:'#ffc0cb', town:'沼ノ端中央', chome:'6'},
+      {name:'あか',    area:'沼ノ端中央1～2丁目', color:'#ff9999', town:'沼ノ端中央', chome:'1,2'},
+      {name:'きいろ',  area:'沼ノ端中央3～5丁目', color:'#fff2cc', town:'沼ノ端中央', chome:'3,4,5'},
+      {name:'オレンジ',area:'東開町3丁目',        color:'#ffd966', town:'東開町',     chome:'3'},
+      {name:'みどり',  area:'東開町2・4・5丁目',  color:'#c6efce', town:'東開町',     chome:'2,4,5'},
+      {name:'青',      area:'東開町1・6丁目',     color:'#bdd7ee', town:'東開町',     chome:'1,6'},
+    ],
+  };
+}
+
+/* ---------------- state ---------------- */
+let S = {settings: defaultSettings(), students: [], log: []};
+let fileName = '';
+let dirty = false;
+let tab = 'data';
+let selId = null;          // 編制ボードで選択中
+let dataFilter = {en:'', q:'', dest:''};
+let mxEn = '';
+let printOpt = {kind:'roster', scope:'all', showLv:false};
+
+function blankStudent(id){
+  const s = {id:String(id), kana:'', name:'', dob:'', dobRaw:'', sex:'', en:'', guardian:'', addr:'', dest:'通常学級',
+    marks:{}, notes:{}, friends:[], apart:[], special:false, agency:false, agencyName:'', sibling:'', home:'', message:'',
+    lvOverride:null, parOverride:null, cls:0, lock:false, unmatched:{friends:[], apart:[]}};
+  MARK_KEYS.forEach(k=>s.marks[k]='');
+  return s;
+}
+
+/* ---------------- utilities ---------------- */
+const $ = (sel, root=document)=>root.querySelector(sel);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nl2br = v => esc(v).replace(/\n/g,'<br>');
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2200); }
+function markDirty(){ dirty=true; updateFileInfo(); }
+function updateFileInfo(){
+  const n=S.students.length;
+  $('#fileInfo').innerHTML = (fileName?esc(fileName):'（未保存の新しいデータ）') + `　／　${n}名` + (dirty?'　<span class="dirty">● 未保存の変更あり</span>':'');
+}
+function byId(id){ return S.students.find(s=>s.id===String(id)); }
+function normDigits(s){ return String(s??'').replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
+function cmpKana(a,b){ return (a.kana||a.name).localeCompare(b.kana||b.name,'ja'); }
+function cmpId(a,b){ const x=Number(a.id), y=Number(b.id); if(!isNaN(x)&&!isNaN(y)) return x-y; return a.id.localeCompare(b.id); }
+function nextId(){ let m=0; S.students.forEach(s=>{const n=Number(s.id); if(!isNaN(n)&&n>m)m=n;}); return String(m+1); }
+function dispName(s){ return s ? (s.name || s.kana || ('ID'+s.id)) : '（不明）'; }
+
+/* 生年月日 */
+function parseDob(v){
+  if(v==null || v==='') return '';
+  if(typeof v==='number'){ // Excel serial
+    const d=new Date(Date.UTC(1899,11,30)+Math.round(v)*86400000);
+    return d.toISOString().slice(0,10);
+  }
+  let s=normDigits(String(v)).trim();
+  let m=s.match(/^(\d{4})[\/\-.年]\s*(\d{1,2})[\/\-.月]\s*(\d{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=s.match(/^(R|H|S|令和|平成|昭和)\s*(\d{1,2}|元)\s*[.\/年\-]\s*(\d{1,2})\s*[.\/月\-]\s*(\d{1,2})/i);
+  if(m){
+    const base={R:2018,'令和':2018,H:1988,'平成':1988,S:1925,'昭和':1925}[m[1].toUpperCase()]??{r:2018,h:1988,s:1925}[m[1].toLowerCase()];
+    const y=base+(m[2]==='元'?1:Number(m[2]));
+    return `${y}-${m[3].padStart(2,'0')}-${m[4].padStart(2,'0')}`;
+  }
+  return '';
+}
+function fmtDob(iso){
+  if(!iso) return '';
+  const [y,m,d]=iso.split('-').map(Number);
+  const wa = iso>='2019-05-01' ? 'R'+(y-2018) : iso>='1989-01-08' ? 'H'+(y-1988) : 'S'+(y-1925);
+  return `${wa}.${m}.${d}`;
+}
+function isEarly(s){
+  if(!s.dob) return false;
+  const [,m,d]=s.dob.split('-').map(Number);
+  return m<=3 || (m===4 && d===1);
+}
+
+/* 判定 */
+function autoLevel(s){
+  let dbl=0, sgl=0;
+  LV_KEYS.forEach(k=>{ const v=s.marks[k]; if(v==='◎')dbl++; else if(v==='○')sgl++; });
+  return dbl>=2 ? 3 : (dbl===1 || sgl>=3) ? 2 : 1;
+}
+function autoPar(s){
+  let dbl=0; PAR_KEYS.forEach(k=>{ if(s.marks[k]==='◎') dbl++; });
+  return dbl>=3 ? 3 : dbl>=2 ? 2 : 1;
+}
+const level = s => s.lvOverride || autoLevel(s);
+const parLv = s => s.parOverride || autoPar(s);
+const isLeader = s => s.marks.leader==='○' || s.marks.leader==='◎';
+function blankCount(s){ return MARK_KEYS.filter(k=>!s.marks[k]).length; }
+function isTarget(s){ return !S.settings.excludeSpecial || s.dest==='通常学級' || !s.dest; }
+
+/* 住所 → 地域キー／下校グループ */
+function townChome(addr){
+  const s=normDigits(addr).replace(/[\s　]/g,'');
+  const m=s.match(/^(.*?)(\d+)丁目/);
+  if(m){ return {town:m[1].replace(/^.*?[都道府県]/,'').replace(/^.*?市/,''), chome:Number(m[2])}; }
+  return {town:s.slice(0,4), chome:null};
+}
+function areaKey(addr){ const t=townChome(addr); return t.town+(t.chome??''); }
+function dismissalGroup(addr){
+  const s=normDigits(addr).replace(/[\s　]/g,'');
+  for(const r of S.settings.dismissal){
+    if(!r.town || !s.includes(r.town)) continue;
+    const after=s.slice(s.indexOf(r.town)+r.town.length);
+    const m=after.match(/^(\d+)丁目/);
+    const list=normDigits(r.chome||'').split(/[,、，・\s]+/).filter(Boolean).map(Number);
+    if(list.length===0) return r;
+    if(m && list.includes(Number(m[1]))) return r;
+  }
+  return null;
+}
+
+/* 氏名照合 */
+function normName(s){
+  return String(s??'').replace(/[\s　]/g,'')
+    .replace(/[邉邊]/g,'辺').replace(/髙/g,'高').replace(/﨑/g,'崎').replace(/[濵濱]/g,'浜').replace(/齋/g,'斎').replace(/齊/g,'斉').replace(/德/g,'徳');
+}
+function findByName(q, selfId){
+  const n=normName(q); if(!n) return {hit:null, cands:[]};
+  const pool=S.students.filter(s=>s.id!==selfId);
+  let ex=pool.filter(s=>normName(s.name)===n || normName(s.kana)===n);
+  if(ex.length===1) return {hit:ex[0], cands:ex};
+  if(ex.length>1) return {hit:null, cands:ex};
+  const part=pool.filter(s=>normName(s.name).includes(n) || (n.length>=2 && normName(s.kana).includes(n)));
+  if(part.length===1) return {hit:part[0], cands:part};
+  return {hit:null, cands:part};
+}
+function addRel(kind, aId, bId){
+  const a=byId(aId), b=byId(bId); if(!a||!b||a===b) return;
+  if(!a[kind].includes(b.id)) a[kind].push(b.id);
+  if(!b[kind].includes(a.id)) b[kind].push(a.id);
+}
+function delRel(kind, aId, bId){
+  const a=byId(aId), b=byId(bId);
+  if(a) a[kind]=a[kind].filter(x=>x!==String(bId));
+  if(b) b[kind]=b[kind].filter(x=>x!==String(aId));
+}
+function addLog(kind, target, from, to, detail){
+  const d=new Date();
+  S.log.unshift({t:d.toLocaleString('ja-JP'), kind, target, from, to, detail});
+  if(S.log.length>500) S.log.length=500;
+}
+
+/* =====================================================================
+   Excel 読み込み（外部ライブラリなし：ZIP展開＋XML解析）
+   ===================================================================== */
+async function unzip(buf){
+  const dv=new DataView(buf);
+  let eocd=-1;
+  for(let i=buf.byteLength-22;i>=Math.max(0,buf.byteLength-65557);i--){ if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;} }
+  if(eocd<0) throw new Error('Excelファイルとして読み込めませんでした');
+  const count=dv.getUint16(eocd+10,true); let p=dv.getUint32(eocd+16,true);
+  const files={}; const td=new TextDecoder();
+  for(let n=0;n<count;n++){
+    const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true);
+    const nlen=dv.getUint16(p+28,true), elen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true), lho=dv.getUint32(p+42,true);
+    files[td.decode(new Uint8Array(buf,p+46,nlen))]={method,csize,lho};
+    p+=46+nlen+elen+clen;
+  }
+  return {
+    has:name=>!!files[name],
+    async text(name){
+      const f=files[name]; if(!f) return null;
+      const start=f.lho+30+dv.getUint16(f.lho+26,true)+dv.getUint16(f.lho+28,true);
+      const data=new Uint8Array(buf,start,f.csize);
+      if(f.method===0) return td.decode(data);
+      const stream=new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return await new Response(stream).text();
+    }
+  };
+}
+function xml(str){ return new DOMParser().parseFromString(str,'application/xml'); }
+function kids(el,name){ return Array.from(el.getElementsByTagNameNS('*',name)); }
+function colIdx(ref){ const m=ref.match(/^([A-Z]+)/); let n=0; for(const ch of m[1]) n=n*26+(ch.charCodeAt(0)-64); return n-1; }
+function siText(si){ // ふりがな(rPh)を除外して連結
+  let out='';
+  (function walk(el){ for(const c of el.children){ if(c.localName==='rPh'||c.localName==='phoneticPr') continue; if(c.localName==='t') out+=c.textContent; else walk(c);} })(si);
+  return out;
+}
+async function readWorkbook(buf){
+  const z=await unzip(buf);
+  const wb=xml(await z.text('xl/workbook.xml'));
+  const rels=xml(await z.text('xl/_rels/workbook.xml.rels'));
+  const relMap={}; kids(rels,'Relationship').forEach(r=>relMap[r.getAttribute('Id')]=r.getAttribute('Target'));
+  const ss=[]; const sst=await z.text('xl/sharedStrings.xml');
+  if(sst) kids(xml(sst),'si').forEach(si=>ss.push(siText(si)));
+  const sheets=[];
+  for(const sh of kids(wb,'sheet')){
+    const rid=sh.getAttribute('r:id')||sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+    let target=relMap[rid]||''; target=target.replace(/^\/?xl\//,''); if(target.startsWith('/')) target=target.slice(1);
+    sheets.push({name:sh.getAttribute('name'), path:'xl/'+target});
+  }
+  return {
+    names:sheets.map(s=>s.name),
+    async rows(name){
+      const sh=sheets.find(s=>s.name===name); if(!sh) return null;
+      const doc=xml(await z.text(sh.path)); const rows=[];
+      kids(doc,'row').forEach(row=>{
+        const r=Number(row.getAttribute('r'))-1; const arr=rows[r]=[];
+        kids(row,'c').forEach(c=>{
+          const t=c.getAttribute('t'); const v=kids(c,'v')[0]; let val=null;
+          if(t==='s') val=v?ss[Number(v.textContent)]:'';
+          else if(t==='inlineStr') val=kids(c,'is')[0]?siText(kids(c,'is')[0]):'';
+          else if(t==='str'||t==='e') val=v?v.textContent:'';
+          else if(t==='b') val=v?v.textContent==='1':null;
+          else if(v) val=Number(v.textContent);
+          arr[colIdx(c.getAttribute('r'))]=val;
+        });
+      });
+      return rows;
+    }
+  };
+}
+
+const IMPORT_MAP = {
+  A:{'要支援':'◎','見守り':'○','―':'なし','-':'なし','－':'なし','なし':'なし'},
+  resp:{'声かけで戻れる':'なし','手を添える等が必要':'○','声かけでは変化なし':'◎','支援を拒む・抵抗する':'◎'},
+  B:{'よくある':'◎','ときどき':'○','―':'なし','-':'なし','－':'なし','なし':'なし'},
+  leader:{'はい':'○','いいえ':'なし'},
+  trouble:{'よくある':'◎','ときどきある':'○','なし':'なし'},
+  e_contact:{'非常に多い':'◎','多い':'○','普通':'なし','少ない':'なし'},
+  e_comm:{'難しい':'◎','ときどき難しい':'○','伝わりやすい':'なし'},
+  e_docs:{'不備が多い':'◎','ときどき不備':'○','安定している':'なし'},
+  e_gap:{'大きな差がある':'◎','やや差がある':'○','共有できている':'なし'},
+  e_consult:{'あり（継続中）':'◎','あり（過去）':'○','なし':'なし'},
+};
+function mapMark(table, v){
+  if(v==null) return '';
+  const s=String(v).trim(); if(!s) return '';
+  if(['◎','○','なし'].includes(s)) return s;
+  return table[s] ?? '';
+}
+
+async function importExcel(file){
+  const wbk=await readWorkbook(await file.arrayBuffer());
+  let rows=null, hdrRow=-1, sheetName='';
+  for(const name of wbk.names){
+    const rs=await wbk.rows(name); if(!rs) continue;
+    for(let r=0;r<Math.min(rs.length,10);r++){
+      const row=rs[r]||[];
+      if(row.includes('かな氏名') && row.includes('漢字氏名') && row.some(v=>v==='多動・注意散漫'||v==='就学先')){ rows=rs; hdrRow=r; sheetName=name; break; }
+    }
+    if(rows) break;
+  }
+  if(!rows) throw new Error('「①引継ぎ入力」形式のシート（見出しに「かな氏名」「漢字氏名」がある表）が見つかりませんでした。');
+  const hdr=rows[hdrRow].map(v=>v==null?'':String(v).trim());
+  const C=name=>hdr.indexOf(name);
+  const get=(row,name)=>{ const i=C(name); return i<0?null:row[i]; };
+  const str=(row,name)=>{ const v=get(row,name); return v==null?'':String(v).trim(); };
+
+  const out=[]; const report={n:0, special:0, lvOv:0, parOv:0, dobNg:[], unmatched:0, sheet:sheetName};
+  const A_HDR={hyper:'多動・注意散漫',leave:'離席・行動の逸脱',instr:'指示の理解',comm:'コミュニケーション',kodawari:'こだわり・切り替え',sense:'感覚の過敏さ',emo:'情緒・緊張'};
+  const B_HDR={toilet:'排せつ',meal:'食事',dress:'着替え・身支度',tidy:'片付け・整理'};
+  const E_HDR={e_contact:'連絡・要望の頻度',e_comm:'伝達の通りやすさ',e_docs:'提出物・送迎',e_gap:'状況認識の差',e_consult:'就学・発達の相談歴'};
+  const rawRel=[];
+  for(let r=hdrRow+1;r<rows.length;r++){
+    const row=rows[r]; if(!row) continue;
+    const id=get(row,'ID'); const name=str(row,'漢字氏名'); const kana=str(row,'かな氏名');
+    if(id==null || id==='' || (!name && !kana)) continue;
+    const s=blankStudent(typeof id==='number'?id:String(id).trim());
+    s.kana=kana; s.name=name; s.sex=str(row,'性別'); s.en=str(row,'所属園'); s.guardian=str(row,'保護者氏名'); s.addr=str(row,'住所');
+    s.dest=str(row,'就学先')||'通常学級';
+    const dv=get(row,'生年月日'); s.dobRaw=dv==null?'':String(dv); s.dob=parseDob(dv);
+    if(dv!=null && dv!=='' && !s.dob) report.dobNg.push(s.name);
+    for(const [k,h] of Object.entries(A_HDR)) s.marks[k]=mapMark(IMPORT_MAP.A,get(row,h));
+    s.marks.resp=mapMark(IMPORT_MAP.resp,get(row,'支援への反応'));
+    for(const [k,h] of Object.entries(B_HDR)) s.marks[k]=mapMark(IMPORT_MAP.B,get(row,h));
+    s.notes.health=str(row,'健康面（記述）');
+    s.notes.A_extra=str(row,'Ｂ補足（具体的な様子）');
+    s.marks.leader=mapMark(IMPORT_MAP.leader,get(row,'リーダー性'));
+    s.marks.trouble=mapMark(IMPORT_MAP.trouble,get(row,'トラブルの傾向'));
+    for(const [k,h] of Object.entries(E_HDR)) s.marks[k]=mapMark(IMPORT_MAP[k],get(row,h));
+    s.sibling=str(row,'きょうだいの在籍'); s.home=str(row,'家庭状況で配慮が必要な点');
+    s.special=str(row,'特に気をつけてほしい児童')==='はい';
+    s.agency=str(row,'支援機関の利用')==='あり'; s.agencyName=str(row,'支援機関名・診断名');
+    s.message=str(row,'園から特に伝えたいこと');
+    rawRel.push({s, f:str(row,'仲の良い子（氏名）'), a:str(row,'離したほうがよい子（氏名）'),
+      lv:get(row,'配慮レベル（確定）'), par:get(row,'保護者対応レベル（確定）')});
+    out.push(s);
+  }
+  S={settings:S.settings, students:out, log:[]};
+  for(const x of rawRel){
+    const s=x.s;
+    if(s.dest!=='通常学級') report.special++;
+    if(s.dest==='通常学級'){
+      const lv=Number(x.lv); if([1,2,3].includes(lv) && lv!==autoLevel(s)){ s.lvOverride=lv; report.lvOv++; }
+      const pv=Number(x.par); if([1,2,3].includes(pv) && pv!==autoPar(s)){ s.parOverride=pv; report.parOv++; }
+    }
+    for(const [kind,txt] of [['friends',x.f],['apart',x.a]]){
+      txt.split(/[、,，・\/／\n;；]+/).map(t=>t.trim()).filter(t=>t && t!=='なし').forEach(t=>{
+        const {hit}=findByName(t, s.id);
+        if(hit) addRel(kind, s.id, hit.id); else { s.unmatched[kind].push(t); report.unmatched++; }
+      });
+    }
+  }
+  report.n=out.length;
+  addLog('取込', file.name, '', '', `${report.n}名を取り込み（シート：${sheetName}）`);
+  return report;
+}
+
+/* =====================================================================
+   編制エンジン
+   ===================================================================== */
+function buildModel(){
+  const set=S.settings, K=Math.max(2,Number(set.classCount)||2);
+  const stu=S.students.filter(isTarget);
+  const idx=new Map(stu.map((s,i)=>[s.id,i]));
+  const areaKeys=[], enKeys=[];
+  const m={K, stu, n:stu.length, idx,
+    sex:[], lv:[], par:[], early:[], leader:[], area:[], en:[], lock:[], cls:[], fr:[], ap:[]};
+  stu.forEach((s,i)=>{
+    m.sex[i]=s.sex==='男'?0:1; m.lv[i]=level(s); m.par[i]=parLv(s); m.early[i]=isEarly(s)?1:0; m.leader[i]=isLeader(s)?1:0;
+    const ak=areaKey(s.addr); let a=areaKeys.indexOf(ak); if(a<0){areaKeys.push(ak);a=areaKeys.length-1;} m.area[i]=a;
+    const ek=s.en||'（未記入）'; let e=enKeys.indexOf(ek); if(e<0){enKeys.push(ek);e=enKeys.length-1;} m.en[i]=e;
+    m.lock[i]=!!s.lock; m.cls[i]=(s.cls>=1&&s.cls<=K)?s.cls:0;
+  });
+  stu.forEach((s,i)=>{
+    m.fr[i]=[...new Set(s.friends.map(id=>idx.get(id)).filter(j=>j!=null&&j!==i))];
+    m.ap[i]=[...new Set(s.apart.map(id=>idx.get(id)).filter(j=>j!=null&&j!==i))];
+  });
+  m.nA=areaKeys.length; m.nE=enKeys.length; m.areaKeys=areaKeys; m.enKeys=enKeys;
+  const W={}; set.crit.forEach(c=>W[c.k]=Number(c.w)||0);
+  m.W=W; m.wArea=Number(set.wArea)||0; m.wEn=Number(set.wEn)||0; m.wFriend=Number(set.wFriend)||0;
+  return m;
+}
+function makeState(m){
+  const K=m.K, z=()=>new Float64Array(K+1);
+  const st={cnt:z(),male:z(),female:z(),lvSum:z(),lv3:z(),lv2:z(),parSum:z(),par3:z(),early:z(),leader:z(),
+    area:Array.from({length:m.nA},z), en:Array.from({length:m.nE},z), apartV:0, friendS:0, cls:Int32Array.from(m.cls)};
+  for(let i=0;i<m.n;i++){ const c=st.cls[i]; st.cls[i]=0; place(m,st,i,c); }
+  return st;
+}
+function addStat(m,st,i,c,g){
+  if(c<=0) return;
+  st.cnt[c]+=g; if(m.sex[i]===0) st.male[c]+=g; else st.female[c]+=g;
+  st.lvSum[c]+=g*m.lv[i]; if(m.lv[i]>=3) st.lv3[c]+=g; if(m.lv[i]===2) st.lv2[c]+=g;
+  st.parSum[c]+=g*m.par[i]; if(m.par[i]>=3) st.par3[c]+=g;
+  st.early[c]+=g*m.early[i]; st.leader[c]+=g*m.leader[i];
+  st.area[m.area[i]][c]+=g; st.en[m.en[i]][c]+=g;
+}
+function place(m,st,i,c){
+  const old=st.cls[i]; if(old===c) return;
+  for(const j of m.ap[i]){ const cj=st.cls[j]; if(cj>0){ if(old>0&&cj===old) st.apartV--; if(c>0&&cj===c) st.apartV++; } }
+  for(const j of m.fr[i]){ const cj=st.cls[j]; if(cj>0){ if(old>0&&cj!==old) st.friendS--; if(c>0&&cj!==c) st.friendS++; } }
+  addStat(m,st,i,old,-1); addStat(m,st,i,c,1); st.cls[i]=c;
+}
+function ss(arr,K){ let s=0; for(let c=1;c<=K;c++) s+=arr[c]; const mu=s/K; let v=0; for(let c=1;c<=K;c++){const d=arr[c]-mu; v+=d*d;} return v; }
+function cost(m,st){
+  const K=m.K, W=m.W; let v=0;
+  for(const k of ['cnt','male','female','lvSum','lv3','lv2','parSum','par3','early','leader']){
+    const w=W[k==='cnt'?'size':k]; if(w) v+=w*ss(st[k],K);
+  }
+  if(m.wArea) for(const a of st.area) v+=m.wArea*ss(a,K);
+  if(m.wEn) for(const e of st.en) v+=m.wEn*ss(e,K);
+  v+=100000*st.apartV + m.wFriend*st.friendS;
+  return v;
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+function localSearch(m,st,movable){
+  let cur=cost(m,st), moves=0;
+  for(let pass=0;pass<200;pass++){
+    let imp=false;
+    for(const i of shuffle(movable.slice())){
+      const org=st.cls[i]; let best=org, bv=cur;
+      for(let c=1;c<=m.K;c++){ if(c===org) continue; place(m,st,i,c); const v=cost(m,st); if(v<bv-1e-9){bv=v;best=c;} }
+      place(m,st,i,best); if(best!==org){cur=bv;imp=true;moves++;}
+    }
+    for(let a=0;a<movable.length;a++){
+      const i=movable[a];
+      for(let b=a+1;b<movable.length;b++){
+        const j=movable[b], ci=st.cls[i], cj=st.cls[j]; if(ci===cj) continue;
+        place(m,st,i,cj); place(m,st,j,ci); const v=cost(m,st);
+        if(v<cur-1e-9){cur=v;imp=true;moves++;} else { place(m,st,i,ci); place(m,st,j,cj); }
+      }
+    }
+    if(!imp) break;
+  }
+  return {cost:cur, moves};
+}
+function runFormation(mode){
+  const m=buildModel();
+  if(m.n===0){ toast('編制対象の児童がいません'); return; }
+  const movable=[]; for(let i=0;i<m.n;i++) if(!m.lock[i]) movable.push(i);
+  const t0=performance.now();
+  let best=null, bestCost=Infinity, tries=0;
+  if(mode==='fresh'){
+    const base=Int32Array.from(m.cls); movable.forEach(i=>base[i]=0);
+    const order0=movable.slice().sort((a,b)=>(m.lv[b]+m.par[b]*0.8)-(m.lv[a]+m.par[a]*0.8));
+    while(tries<3 || (performance.now()-t0<1800 && tries<80)){
+      tries++;
+      const st=makeState({...m, cls:base});
+      // 重い児童から順に、評価値が最も良くなる学級へ（同点はランダム）
+      const order=order0.map(i=>[i,m.lv[i]+m.par[i]*0.8+Math.random()*0.5]).sort((a,b)=>b[1]-a[1]).map(x=>x[0]);
+      for(const i of order){
+        let bc=1,bv=Infinity;
+        for(const c of shuffle(Array.from({length:m.K},(_,k)=>k+1))){ place(m,st,i,c); const v=cost(m,st); if(v<bv-1e-9){bv=v;bc=c;} }
+        place(m,st,i,bc);
+      }
+      const r=localSearch(m,st,movable);
+      if(r.cost<bestCost-1e-9){bestCost=r.cost; best=Int32Array.from(st.cls);}
+    }
+  } else {
+    const st=makeState(m);
+    movable.forEach(i=>{ if(st.cls[i]===0){ let bc=1,bv=Infinity; for(let c=1;c<=m.K;c++){place(m,st,i,c);const v=cost(m,st);if(v<bv){bv=v;bc=c;}} place(m,st,i,bc);} });
+    const r=localSearch(m,st,movable); best=Int32Array.from(st.cls); bestCost=r.cost; tries=1;
+  }
+  let changed=0;
+  m.stu.forEach((s,i)=>{ if(s.cls!==best[i]) changed++; s.cls=best[i]; });
+  S.students.filter(s=>!isTarget(s)).forEach(s=>s.cls=0);
+  const st=makeState({...m, cls:best});
+  addLog(mode==='fresh'?'自動編制':'改善', `${m.n}名／${m.K}学級`, '', '',
+    `${changed}名の所属が変化／評価値 ${bestCost.toFixed(1)}／試行${tries}回／固定${m.n-movable.length}名` + (st.apartV?`／離す指定の未達成 ${st.apartV}件`:''));
+  markDirty(); render();
+  toast(st.apartV ? `編制しました（「離す」指定の未達成が ${st.apartV} 件あります）` : '編制しました');
+}
+
+/* 現在の配置の集計 */
+function currentStats(){
+  const m=buildModel(); const st=makeState(m);
+  const rows=S.settings.crit.map(c=>{
+    const key=c.k==='size'?'cnt':c.k; const vals=[]; for(let k=1;k<=m.K;k++) vals.push(st[key][k]);
+    const diff=Math.max(...vals)-Math.min(...vals);
+    return {l:c.l, vals, diff, ok:diff<=Number(c.t)};
+  });
+  // 違反リスト
+  const viol=[], split=[];
+  const seenA=new Set(), seenF=new Set();
+  m.stu.forEach((s,i)=>{
+    m.ap[i].forEach(j=>{ const key=[i,j].sort().join('-'); if(seenA.has(key))return; seenA.add(key);
+      if(st.cls[i]>0 && st.cls[i]===st.cls[j]) viol.push([s, m.stu[j]]); });
+    m.fr[i].forEach(j=>{ const key=[i,j].sort().join('-'); if(seenF.has(key))return; seenF.add(key);
+      if(st.cls[i]>0 && st.cls[j]>0 && st.cls[i]!==st.cls[j]) split.push([s, m.stu[j]]); });
+  });
+  const unassigned=m.stu.filter((s,i)=>st.cls[i]===0);
+  return {m, st, rows, viol, split, unassigned, cost:cost(m,st)};
+}
+
+/* =====================================================================
+   画面描画
+   ===================================================================== */
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
+  const v=$('#view'); v.onclick=null; v.onchange=null;
+  ({data:renderData, matrix:renderMatrix, form:renderForm, print:renderPrint, settings:renderSettings, help:renderHelp})[tab](v);
+  updateFileInfo();
+}
+function lvBadge(s, withAuto){
+  const lv=level(s), a=autoLevel(s);
+  return `<span class="badge lv${lv} ${s.lvOverride?'ov':''}" title="${s.lvOverride?'確定値（自動判定：'+a+'）':'自動判定'}">${lv}</span>` + (withAuto && s.lvOverride ? ` <span class="muted">(自動${a})</span>`:'');
+}
+function parBadge(s, withAuto){
+  const p=parLv(s), a=autoPar(s);
+  return `<span class="badge lv${p} ${s.parOverride?'ov':''}" title="${s.parOverride?'確定値（自動判定：'+a+'）':'自動判定'}">${p}</span>` + (withAuto && s.parOverride ? ` <span class="muted">(自動${a})</span>`:'');
+}
+function enList(){ return [...new Set(S.students.map(s=>s.en).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja')); }
+
+/* ---------- ① 児童データ ---------- */
+function renderData(v){
+  if(S.students.length===0){
+    v.innerHTML=`<div class="panel"><h2>はじめに</h2>
+      <p>データがまだありません。次のどれかから始めてください。</p>
+      <div class="row">
+        <button class="primary" data-act="importXlsx">Excel（引継ぎシート）から取り込む</button>
+        <button data-act="openJson">保存したデータ（JSON）を開く</button>
+        <button data-act="add">1人ずつ入力する</button>
+      </div>
+      <p class="muted">Excelは「新1年生 学級編制シート」の「①引継ぎ入力」シートの形式に対応しています（.xlsm / .xlsx）。</p></div>`;
+    return;
+  }
+  const ens=enList();
+  const issues=[];
+  const ids=new Map(); S.students.forEach(s=>ids.set(s.id,(ids.get(s.id)||0)+1));
+  const dup=[...ids].filter(([,n])=>n>1).map(([id])=>id);
+  if(dup.length) issues.push(`IDの重複：${dup.map(esc).join('、')}`);
+  const noSex=S.students.filter(s=>s.sex!=='男'&&s.sex!=='女'); if(noSex.length) issues.push(`性別が未入力：${noSex.map(s=>esc(dispName(s))).join('、')}`);
+  const noDob=S.students.filter(s=>!s.dob); if(noDob.length) issues.push(`生年月日が未入力または読み取れない：${noDob.map(s=>esc(dispName(s))).join('、')}`);
+  const unm=S.students.filter(s=>s.unmatched.friends.length||s.unmatched.apart.length);
+  const blanks=S.students.reduce((a,s)=>a+blankCount(s),0);
+
+  let list=S.students.slice().sort(cmpId);
+  if(dataFilter.en) list=list.filter(s=>s.en===dataFilter.en);
+  if(dataFilter.dest==='reg') list=list.filter(s=>s.dest==='通常学級');
+  if(dataFilter.dest==='sp') list=list.filter(s=>s.dest!=='通常学級');
+  if(dataFilter.q){ const q=normName(dataFilter.q); list=list.filter(s=>normName(s.name).includes(q)||normName(s.kana).includes(q)); }
+
+  const cnt=(f)=>S.students.filter(s=>s.dest==='通常学級'&&f(s)).length;
+  v.innerHTML=`
+  ${unm.length?`<div class="alert warn"><b>照合できなかった名前が ${unm.reduce((a,s)=>a+s.unmatched.friends.length+s.unmatched.apart.length,0)} 件あります。</b>
+    「仲の良い子」「離したほうがよい子」に書かれていた名前のうち、名簿の児童と特定できなかったものです。下の表で相手を選んでください。
+    <table class="grid" style="margin-top:8px">
+      <tr><th>児童</th><th>種別</th><th>書かれていた名前</th><th>相手を選ぶ</th><th></th></tr>
+      ${unm.flatMap(s=>[...s.unmatched.friends.map((t,ix)=>['friends',t,ix]),...s.unmatched.apart.map((t,ix)=>['apart',t,ix])].map(([k,t,ix])=>{
+        const {cands}=findByName(t,s.id);
+        const opts=(cands.length?cands:S.students.filter(x=>x.id!==s.id).sort(cmpKana));
+        return `<tr><td>${esc(dispName(s))}</td><td>${k==='friends'?'仲の良い子':'<b style="color:var(--ng)">離す</b>'}</td><td>${esc(t)}</td>
+          <td><select data-unm-sel="${esc(s.id)}|${k}|${ix}"><option value="">― 選んでください ―</option>${opts.map(o=>`<option value="${esc(o.id)}">${esc(o.name)}（${esc(o.kana)}・${esc(o.en)}）</option>`).join('')}</select></td>
+          <td><button class="small" data-unm-ok="${esc(s.id)}|${k}|${ix}">決定</button> <button class="small danger" data-unm-del="${esc(s.id)}|${k}|${ix}">破棄</button></td></tr>`;}).join(''))}
+    </table></div>`:''}
+  ${issues.length?`<div class="alert ng">${issues.map(x=>'<div>'+x+'</div>').join('')}</div>`:''}
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <div class="row">
+        <b>${S.students.length}名</b>
+        <span class="muted">（通常学級 ${cnt(()=>true)}名：配慮レベル3 ${cnt(s=>level(s)===3)}／2 ${cnt(s=>level(s)===2)}　保護者対応3 ${cnt(s=>parLv(s)===3)}／2 ${cnt(s=>parLv(s)===2)}）</span>
+      </div>
+      <div class="row">
+        <select id="fEn"><option value="">すべての園</option>${ens.map(e=>`<option ${e===dataFilter.en?'selected':''}>${esc(e)}</option>`).join('')}</select>
+        <select id="fDest"><option value="">就学先：すべて</option><option value="reg" ${dataFilter.dest==='reg'?'selected':''}>通常学級のみ</option><option value="sp" ${dataFilter.dest==='sp'?'selected':''}>特別支援・対象外のみ</option></select>
+        <input type="text" id="fQ" placeholder="氏名・かなで検索" value="${esc(dataFilter.q)}" style="width:160px">
+        <button data-act="add" class="primary">＋ 児童を追加</button>
+      </div>
+    </div>
+    ${blanks?`<div class="alert info" style="margin-top:10px">未記入（「なし」とも記録されていない）の項目が全体で ${blanks} 件あります。聞き取りで「該当なし」と確認済みなら、
+      <button class="small" data-act="fillNone">${dataFilter.en?esc(dataFilter.en)+'の':'表示中の'}未記入をすべて「なし」にする</button></div>`:''}
+    <div style="overflow:auto;margin-top:10px">
+    <table class="grid">
+      <tr><th class="c">ID</th><th>氏名</th><th>ふりがな</th><th class="c">性別</th><th>生年月日</th><th>所属園</th><th>就学先</th>
+        <th class="c">配慮</th><th class="c">保護者</th><th class="c">◎</th><th class="c">○</th><th class="c">リーダー</th><th>一緒／離す</th><th class="c">未記入</th><th class="c">組</th></tr>
+      ${list.map(s=>{
+        const dbl=LV_KEYS.filter(k=>s.marks[k]==='◎').length, sgl=LV_KEYS.filter(k=>s.marks[k]==='○').length, bl=blankCount(s);
+        return `<tr class="clickable" data-edit="${esc(s.id)}">
+          <td class="c">${esc(s.id)}</td><td><b>${esc(s.name)}</b>${s.special?' <span class="badge lv3" title="特に気をつけてほしい児童">特</span>':''}${s.agency?' <span class="badge lv1" title="支援機関の利用あり">機</span>':''}</td><td>${esc(s.kana)}</td>
+          <td class="c" style="color:${s.sex==='男'?'var(--male)':s.sex==='女'?'var(--female)':'var(--ng)'}">${esc(s.sex||'未')}</td>
+          <td>${s.dob?fmtDob(s.dob)+(isEarly(s)?' <span class="tag ea">早</span>':''):`<span style="color:var(--ng)">${esc(s.dobRaw||'未入力')}</span>`}</td>
+          <td>${esc(s.en)}</td><td>${s.dest==='通常学級'?'通常':`<span class="badge lv2">${esc(s.dest)}</span>`}</td>
+          <td class="c">${s.dest==='通常学級'?lvBadge(s):'―'}</td><td class="c">${parBadge(s)}</td>
+          <td class="c">${dbl||''}</td><td class="c">${sgl||''}</td><td class="c">${isLeader(s)?s.marks.leader:''}</td>
+          <td>${s.friends.length?`<span class="tag" style="color:var(--ok)">一緒${s.friends.length}</span> `:''}${s.apart.length?`<span class="tag" style="color:var(--ng)">離す${s.apart.length}</span>`:''}</td>
+          <td class="c">${bl?`<span class="muted">${bl}</span>`:''}</td><td class="c">${s.cls||''}</td></tr>`;}).join('')}
+    </table></div>
+    <p class="muted">行をクリックすると、聞き取りシートと同じ並びで詳しく入力・修正できます。「配慮」「保護者」の点線枠は、自動判定を手で上書きした確定値です。</p>
+  </div>`;
+  $('#fEn').onchange=e=>{dataFilter.en=e.target.value;render();};
+  $('#fDest').onchange=e=>{dataFilter.dest=e.target.value;render();};
+  $('#fQ').oninput=e=>{dataFilter.q=e.target.value; clearTimeout(renderData._t); renderData._t=setTimeout(()=>{render(); const q=$('#fQ'); q.focus(); q.setSelectionRange(q.value.length,q.value.length);},250);};
+}
+
+/* ---------- 編集ダイアログ ---------- */
+function segHtml(key, val){
+  return `<span class="seg" data-seg="${key}">${MARKS.map(m=>`<button type="button" data-v="${m}" class="${val===m?'on':''} m-${MARK_CLASS[m]}">${m||'未'}</button>`).join('')}</span>`;
+}
+function itemRow(s, it, judgeLabel){
+  return `<div class="item"><div class="lb"><b>${esc(it.l)}${judgeLabel||''}</b><span>${esc(it.h)}</span></div>
+    <div>${segHtml(it.k, s.marks[it.k])}</div>
+    <div><input type="text" style="width:100%" data-note="${it.k}" value="${esc(s.notes[it.k]||'')}" placeholder="具体的な様子・エピソード"></div></div>`;
+}
+function relEditor(s, kind){
+  const others=S.students.filter(x=>x.id!==s.id && !s[kind].includes(x.id)).sort(cmpKana);
+  return `<div class="chips" style="margin-bottom:4px">${s[kind].map(id=>{const o=byId(id);return `<span class="chip ${kind==='apart'?'apart':'friend'}">${esc(dispName(o))}<small class="muted">（${esc(o?.en||'')}）</small><button type="button" data-reldel="${kind}|${esc(id)}" title="外す">×</button></span>`;}).join('')||'<span class="muted">（なし）</span>'}</div>
+   <div class="row"><select data-reladd-sel="${kind}" style="max-width:320px"><option value="">― 名簿から選ぶ ―</option>${others.map(o=>`<option value="${esc(o.id)}">${esc(o.name)}（${esc(o.kana)}・${esc(o.en)}）</option>`).join('')}</select>
+   <button type="button" class="small" data-reladd="${kind}">追加</button>
+   ${s.unmatched[kind].length?`<span class="muted" style="color:var(--warn)">未照合：${s.unmatched[kind].map(esc).join('、')}</span>`:''}</div>`;
+}
+function openEditor(id, isNew){
+  const s=byId(id); const d=$('#dlg');
+  const draw=()=>{
+    const lvA=autoLevel(s), pA=autoPar(s);
+    const dblN=LV_KEYS.filter(k=>s.marks[k]==='◎').length, sglN=LV_KEYS.filter(k=>s.marks[k]==='○').length, eN=PAR_KEYS.filter(k=>s.marks[k]==='◎').length;
+    d.innerHTML=`
+    <div class="dlg-head"><h3>${isNew?'児童を追加':'児童の情報'}：${esc(s.name||'（氏名未入力）')}</h3>
+      <button type="button" class="danger" data-dlg="del">この児童を削除</button><button type="button" class="primary" data-dlg="close">閉じる</button></div>
+    <div class="dlg-body">
+      <div class="judge">
+        <div><b>配慮レベル</b>　自動判定 <span class="badge lv${lvA}">${lvA}</span> <span class="muted">（◎${dblN}・○${sglN}）</span>　→　確定
+          <select data-f="lvOverride"><option value="">自動のまま</option>${[1,2,3].map(n=>`<option ${s.lvOverride===n?'selected':''}>${n}</option>`).join('')}</select></div>
+        <div><b>保護者対応レベル</b>　自動判定 <span class="badge lv${pA}">${pA}</span> <span class="muted">（E欄4項目の◎${eN}）</span>　→　確定
+          <select data-f="parOverride"><option value="">自動のまま</option>${[1,2,3].map(n=>`<option ${s.parOverride===n?'selected':''}>${n}</option>`).join('')}</select></div>
+      </div>
+      <div class="sec"><h4>基本情報</h4><div class="in fgrid">
+        <label>ID<input type="text" data-f="id" value="${esc(s.id)}"></label>
+        <label>漢字氏名<input type="text" data-f="name" value="${esc(s.name)}"></label>
+        <label>かな氏名<input type="text" data-f="kana" value="${esc(s.kana)}"></label>
+        <label>性別<select data-f="sex"><option value="">―</option><option ${s.sex==='男'?'selected':''}>男</option><option ${s.sex==='女'?'selected':''}>女</option></select></label>
+        <label>生年月日 ${s.dob?`<span>（${fmtDob(s.dob)}${isEarly(s)?'・早生まれ':''}）</span>`:''}<input type="date" data-f="dob" value="${esc(s.dob)}"></label>
+        <label>所属園<input type="text" data-f="en" list="enList" value="${esc(s.en)}"></label>
+        <label>保護者氏名<input type="text" data-f="guardian" value="${esc(s.guardian)}"></label>
+        <label style="grid-column:span 2">住所<input type="text" data-f="addr" value="${esc(s.addr)}"></label>
+        <label>就学先<select data-f="dest">${DESTS.map(x=>`<option ${s.dest===x?'selected':''}>${x}</option>`).join('')}</select></label>
+      </div><datalist id="enList">${enList().map(e=>`<option value="${esc(e)}">`).join('')}</datalist></div>
+
+      <div class="sec"><h4>Ａ 行動・発達 <span class="muted">要支援＝◎／見守り＝○／該当なし＝なし</span></h4><div class="in">
+        ${A_ITEMS.map(it=>itemRow(s,it)).join('')}
+        <div style="margin-top:6px"><span class="muted">Ａ補足（具体的な様子）</span><textarea data-note="A_extra">${esc(s.notes.A_extra||'')}</textarea></div>
+      </div></div>
+      <div class="sec"><h4>Ｂ 生活面 <span class="muted">要支援＝◎／見守り＝○</span></h4><div class="in">${B_ITEMS.map(it=>itemRow(s,it)).join('')}</div></div>
+      <div class="sec"><h4>Ｃ 人間関係 <span class="muted">学級編制で最も参考にする項目。「離したほうがよい子」は必ず別の学級、「仲の良い子」はできるだけ同じ学級にします</span></h4><div class="in">
+        ${itemRow(s,C_ITEMS[0])}
+        <div class="item"><div class="lb"><b>仲の良い子</b><span>同じ小学校へ進む子同士の組み合わせ</span></div><div style="grid-column:span 2">${relEditor(s,'friends')}
+          <input type="text" style="width:100%;margin-top:4px" data-note="friends" value="${esc(s.notes.friends||'')}" placeholder="具体的な様子"></div></div>
+        <div class="item"><div class="lb"><b style="color:var(--ng)">離したほうがよい子</b><span>組み合わせと、その理由</span></div><div style="grid-column:span 2">${relEditor(s,'apart')}
+          <input type="text" style="width:100%;margin-top:4px" data-note="apart" value="${esc(s.notes.apart||'')}" placeholder="理由"></div></div>
+        ${itemRow(s,C_ITEMS[1],' <span class="muted">（配慮レベルに算入）</span>')}
+      </div></div>
+      <div class="sec"><h4>Ｄ 総合</h4><div class="in">
+        <div class="item"><div class="lb"><b>特に気をつけてほしい児童</b><span>優先度の高い順にお聞きする</span></div>
+          <div><label><input type="checkbox" data-f="special" ${s.special?'checked':''}> 該当</label></div>
+          <div><input type="text" style="width:100%" data-note="special" value="${esc(s.notes.special||'')}" placeholder="具体的な様子"></div></div>
+        <div class="item"><div class="lb"><b>支援機関の利用</b><span>療育・巡回相談・通院など</span></div>
+          <div><label><input type="checkbox" data-f="agency" ${s.agency?'checked':''}> 利用あり</label></div>
+          <div><input type="text" style="width:100%" data-f="agencyName" value="${esc(s.agencyName)}" placeholder="支援機関名・診断名"></div></div>
+        <div style="margin-top:6px"><span class="muted">園から特に伝えたいこと（良さ・強みも含めて）</span><textarea data-f="message" style="min-height:80px">${esc(s.message)}</textarea></div>
+        <p class="muted" style="margin:4px 0 0">Ｄ欄は配慮レベルの自動判定には含めません。必要に応じて上の「確定」で調整してください。</p>
+      </div></div>
+      <div class="sec"><h4>Ｅ 家庭・保護者 <span class="muted">要配慮＝◎／傾向あり＝○　※保護者対応レベルは上の4項目の ◎ の数で判定</span></h4><div class="in">
+        ${E_ITEMS.map(it=>itemRow(s,it,it.judge?' <span class="muted">（判定）</span>':'')).join('')}
+        <div class="item"><div class="lb"><b>きょうだいが本校に在籍</b><span>氏名と学年</span></div><div style="grid-column:span 2"><input type="text" style="width:100%" data-f="sibling" value="${esc(s.sibling)}"></div></div>
+        <div class="item"><div class="lb"><b>家庭状況で配慮が必要</b><span>差し支えない範囲で</span></div><div style="grid-column:span 2"><textarea data-f="home">${esc(s.home)}</textarea></div></div>
+      </div></div>
+    </div>`;
+  };
+  draw();
+  d.onclick=e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    if(b.dataset.dlg==='close'){ d.close(); return; }
+    if(b.dataset.dlg==='del'){
+      if(!confirm(`${dispName(s)} を削除します。よろしいですか？`)) return;
+      S.students.forEach(x=>{x.friends=x.friends.filter(i=>i!==s.id); x.apart=x.apart.filter(i=>i!==s.id);});
+      S.students=S.students.filter(x=>x!==s); markDirty(); d.close(); return;
+    }
+    const seg=b.closest('[data-seg]');
+    if(seg){ s.marks[seg.dataset.seg]=b.dataset.v; markDirty(); const y=d.scrollTop; draw(); d.scrollTop=y; return; }
+    if(b.dataset.reldel){ const [k,id]=b.dataset.reldel.split('|'); delRel(k,s.id,id); markDirty(); const y=d.scrollTop; draw(); d.scrollTop=y; return; }
+    if(b.dataset.reladd){ const k=b.dataset.reladd; const sel=d.querySelector(`[data-reladd-sel="${k}"]`); if(!sel.value) return;
+      const other=k==='friends'?'apart':'friends';
+      if(s[other].includes(sel.value)){ alert('同じ相手が「'+(other==='apart'?'離す':'仲の良い子')+'」にも入っています。どちらか一方にしてください。'); return; }
+      addRel(k,s.id,sel.value); markDirty(); const y=d.scrollTop; draw(); d.scrollTop=y; return; }
+  };
+  d.onchange=e=>{
+    const el=e.target;
+    if(el.dataset.f){
+      const f=el.dataset.f; let v=el.type==='checkbox'?el.checked:el.value;
+      if(f==='id'){ v=String(v).trim(); if(!v) return; if(S.students.some(x=>x!==s&&x.id===v)){alert('そのIDは既に使われています');el.value=s.id;return;}
+        const old=s.id; S.students.forEach(x=>{x.friends=x.friends.map(i=>i===old?v:i);x.apart=x.apart.map(i=>i===old?v:i);}); s.id=v; }
+      else if(f==='lvOverride'||f==='parOverride') s[f]=v?Number(v):null;
+      else if(f==='dob'){ s.dob=v; s.dobRaw=''; }
+      else s[f]=v;
+      markDirty();
+      if(['lvOverride','parOverride','name','dob','dest'].includes(f)){ const y=d.scrollTop; draw(); d.scrollTop=y; }
+    }
+    if(el.dataset.note){ s.notes[el.dataset.note]=el.value; markDirty(); }
+  };
+  d.onclose=()=>render();
+  d.showModal();
+}
+
+/* ---------- ② 園別一括入力 ---------- */
+function renderMatrix(v){
+  const ens=enList();
+  if(!S.students.length){ v.innerHTML='<div class="panel">児童データがありません。</div>'; return; }
+  if(mxEn && !ens.includes(mxEn) && mxEn!=='*') mxEn='';
+  if(!mxEn) mxEn=ens[0]||'*';
+  const list=S.students.filter(s=>mxEn==='*'||s.en===mxEn).sort(cmpKana);
+  const cols=[...A_ITEMS.map(x=>({...x,g:'A'})), ...B_ITEMS.map(x=>({...x,g:'B'})), ...C_ITEMS.map(x=>({...x,g:'C'})), ...E_ITEMS.map(x=>({...x,g:'E'}))];
+  v.innerHTML=`<div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><b>園：</b><select id="mxEn">${ens.map(e=>`<option ${e===mxEn?'selected':''}>${esc(e)}</option>`).join('')}<option value="*" ${mxEn==='*'?'selected':''}>（全員）</option></select>
+        <span class="muted">${list.length}名</span></div>
+      <div class="row"><button data-act="mxFill">この表の未記入をすべて「なし」にする</button></div>
+    </div>
+    <p class="muted" style="margin:6px 0 10px">聞き取りシート1枚（1園）分をまとめて入力する画面です。マスをクリックするたびに　未記入 → なし → ○ → ◎ → 未記入　と切り替わります。右クリックで逆回り。氏名をクリックすると詳細入力が開きます。</p>
+    <div class="mx-wrap"><table class="mx">
+      <thead><tr><th class="nm" rowspan="2">氏名</th>
+        <th colspan="${A_ITEMS.length}" class="gA">Ａ 行動・発達</th><th colspan="${B_ITEMS.length}" class="gB">Ｂ 生活面</th><th colspan="2" class="gC">Ｃ</th><th colspan="${E_ITEMS.length}" class="gE">Ｅ 家庭・保護者</th>
+        <th rowspan="2">配慮</th><th rowspan="2">保護者</th></tr>
+        <tr>${cols.map(c=>`<th class="hz g${c.g}" title="${esc(c.l+'：'+c.h)}">${esc(c.s||c.l)}</th>`).join('')}</tr></thead>
+      <tbody>${list.map(s=>`<tr><td class="nm"><a href="#" data-edit="${esc(s.id)}">${esc(s.name)}</a> <span class="muted">${esc(s.sex)}${s.dest!=='通常学級'?'・特支':''}</span></td>
+        ${cols.map(c=>{const m=s.marks[c.k];return `<td class="mk v-${MARK_CLASS[m]}" data-mx="${esc(s.id)}|${c.k}">${m==='なし'?'－':m||'·'}</td>`;}).join('')}
+        <td class="c">${lvBadge(s)}</td><td class="c">${parBadge(s)}</td></tr>`).join('')}</tbody>
+    </table></div></div>`;
+  $('#mxEn').onchange=e=>{mxEn=e.target.value;render();};
+  const cyc=(td,dir)=>{ const [id,k]=td.dataset.mx.split('|'); const s=byId(id); const i=MARKS.indexOf(s.marks[k]); s.marks[k]=MARKS[(i+dir+4)%4]; markDirty();
+    const m=s.marks[k]; td.className='mk v-'+MARK_CLASS[m]; td.textContent=m==='なし'?'－':m||'·';
+    const tr=td.parentElement; tr.children[tr.children.length-2].innerHTML=lvBadge(s); tr.children[tr.children.length-1].innerHTML=parBadge(s); };
+  v.querySelector('table.mx').addEventListener('click',e=>{const td=e.target.closest('td[data-mx]'); if(td) cyc(td,1);});
+  v.querySelector('table.mx').addEventListener('contextmenu',e=>{const td=e.target.closest('td[data-mx]'); if(td){e.preventDefault();cyc(td,-1);}});
+}
+
+/* ---------- ③ 編制・調整 ---------- */
+function renderForm(v){
+  const K=Number(S.settings.classCount);
+  const target=S.students.filter(isTarget), others=S.students.filter(s=>!isTarget(s));
+  if(!target.length){ v.innerHTML='<div class="panel">編制対象の児童がいません。①でデータを入力・取り込みしてください。</div>'; return; }
+  const cs=currentStats();
+  const sel=selId?byId(selId):null;
+  const relF=new Set(sel?sel.friends:[]), relA=new Set(sel?sel.apart:[]);
+  const violIds=new Set(cs.viol.flat().map(s=>s.id));
+  const card=s=>{
+    const lv=level(s), p=parLv(s);
+    return `<div class="card ${s.sex==='男'?'m':s.sex==='女'?'f':''} ${s.lock?'locked':''} ${selId===s.id?'sel':''} ${relF.has(s.id)?'rel-f':''} ${relA.has(s.id)?'rel-a':''} ${violIds.has(s.id)?'viol':''}"
+      draggable="true" data-card="${esc(s.id)}" title="${esc(s.kana)}／${esc(s.en)}">
+      <div class="nm"><b>${esc(s.name||s.kana)}</b><span>${esc(s.en)}</span></div>
+      <div class="tags">${isTarget(s)?`<span class="badge lv${lv}" title="配慮レベル">${lv}</span>`:''}
+        ${p>=2?`<span class="tag p${p}" title="保護者対応レベル${p}">保${p}</span>`:''}
+        ${isLeader(s)?'<span class="tag ld" title="リーダー性">リ</span>':''}${isEarly(s)?'<span class="tag ea" title="早生まれ">早</span>':''}
+        ${s.friends.length?`<span class="tag" style="color:var(--ok)" title="仲の良い子">友${s.friends.length}</span>`:''}${s.apart.length?`<span class="tag" style="color:var(--ng)" title="離す指定">離${s.apart.length}</span>`:''}</div>
+      ${isTarget(s)?`<button class="lk ${s.lock?'on':''}" data-lock="${esc(s.id)}" title="${s.lock?'固定を解除':'この学級に固定（自動編制で動かさない）'}">${s.lock?'🔒':'🔓'}</button>`:''}
+    </div>`;
+  };
+  const colStat=c=>{
+    const st=cs.st; return `${st.cnt[c]}名（男${st.male[c]}・女${st.female[c]}）<br>配慮計${st.lvSum[c]}（Lv3:${st.lv3[c]}／Lv2:${st.lv2[c]}）保護者計${st.parSum[c]}`;
+  };
+  const byCls=c=>target.filter(s=>(s.cls||0)===c).sort(cmpKana);
+  const unas=byCls(0).concat(target.filter(s=>s.cls>K)).sort(cmpKana);
+  const colsN=K+(unas.length?1:0);
+  v.innerHTML=`
+  <div class="panel row" style="justify-content:space-between">
+    <div class="row">
+      <button class="primary" data-act="runFresh">自動編制（最初から）</button>
+      <button data-act="runImprove">今の配置を改善</button>
+      <button data-act="unlockAll">固定をすべて解除</button>
+      <button data-act="clearCls">配置をすべて解除</button>
+    </div>
+    <div class="muted">学級数 ${K}（⑤設定で変更）／対象 ${target.length}名${others.length?`／特別支援等 ${others.length}名は対象外`:''}</div>
+  </div>
+  ${cs.viol.length?`<div class="alert ng"><b>「離したほうがよい子」が同じ学級になっています（${cs.viol.length}件）</b><br>${cs.viol.map(([a,b])=>`${esc(dispName(a))} ⇔ ${esc(dispName(b))}（${a.cls}組）`).join('<br>')}</div>`:''}
+  <div class="lay">
+    <div>
+      <div class="board" style="grid-template-columns:repeat(${colsN},minmax(180px,1fr))">
+        ${Array.from({length:K},(_,i)=>i+1).map(c=>`<div class="col ${sel?'target':''}" data-col="${c}"><div class="col-head"><div class="t">${c}組</div><div class="s">${colStat(c)}</div></div>
+          <div class="cards">${byCls(c).map(card).join('')}</div></div>`).join('')}
+        ${unas.length?`<div class="col unassigned ${sel?'target':''}" data-col="0"><div class="col-head"><div class="t">未配置</div><div class="s">${unas.length}名</div></div><div class="cards">${unas.map(card).join('')}</div></div>`:''}
+      </div>
+      ${others.length?`<div class="col special" style="margin-top:10px;min-height:0"><div class="col-head"><div class="t">特別支援学級・対象外（編制の対象外）</div><div class="s">${others.length}名</div></div>
+        <div class="cards" style="flex-direction:row;flex-wrap:wrap">${others.sort(cmpKana).map(s=>`<div style="min-width:180px">${card(s)}</div>`).join('')}</div></div>`:''}
+      <p class="muted">カードをドラッグして別の組へ移せます（またはカードをクリックして選び、移したい組の欄をクリック）。選んだ児童の「仲の良い子」は緑、「離す」相手は赤の枠で示します。🔓をクリックすると、その学級に固定され、自動編制で動かなくなります。</p>
+    </div>
+    <div class="detail">
+      <div class="panel"><h2>バランス</h2>
+        <table class="grid sum"><tr><th>項目</th>${Array.from({length:K},(_,i)=>`<th class="c">${i+1}組</th>`).join('')}<th class="c">差</th><th class="c">判定</th></tr>
+        ${cs.rows.map(r=>`<tr class="${r.ok?'':'ngrow'}"><td>${esc(r.l)}</td>${r.vals.map(x=>`<td class="c">${+x.toFixed(1)}</td>`).join('')}<td class="c">${+r.diff.toFixed(1)}</td><td class="c ${r.ok?'okc':'ng'}">${r.ok?'○':'要確認'}</td></tr>`).join('')}
+        <tr class="${cs.viol.length?'ngrow':''}"><td>「離す」の未達成</td><td colspan="${K+1}" class="c">${cs.viol.length}件</td><td class="c ${cs.viol.length?'ng':'okc'}">${cs.viol.length?'要修正':'○'}</td></tr>
+        <tr><td>「仲の良い子」が別の学級</td><td colspan="${K+1}" class="c">${cs.split.length}組</td><td class="c">${cs.split.length?'参考':'○'}</td></tr>
+        </table>
+        <p class="muted">差＝最大の組と最小の組の差。許容差は⑤設定で変更できます。</p>
+        ${cs.split.length?`<details><summary class="muted">別の学級になった「仲の良い子」</summary><div class="muted">${cs.split.map(([a,b])=>`${esc(dispName(a))}（${a.cls}組）・${esc(dispName(b))}（${b.cls}組）`).join('<br>')}</div></details>`:''}
+      </div>
+      ${sel?`<div class="panel"><h2>${esc(sel.name)} <span class="muted">${esc(sel.kana)}</span></h2>
+        <div class="muted">${esc(sel.sex)}・${fmtDob(sel.dob)}・${esc(sel.en)}・${esc(sel.addr)}</div>
+        <div style="margin:6px 0">配慮 ${lvBadge(sel,true)}　保護者 ${parBadge(sel,true)}　${isLeader(sel)?'リーダー性'+sel.marks.leader:''}</div>
+        <div class="muted">◎：${LV_KEYS.filter(k=>sel.marks[k]==='◎').map(k=>[...A_ITEMS,...B_ITEMS,...C_ITEMS].find(x=>x.k===k).l).join('、')||'なし'}</div>
+        <div class="muted">○：${LV_KEYS.filter(k=>sel.marks[k]==='○').map(k=>[...A_ITEMS,...B_ITEMS,...C_ITEMS].find(x=>x.k===k).l).join('、')||'なし'}</div>
+        ${sel.friends.length?`<div style="margin-top:4px"><b style="color:var(--ok)">仲の良い子：</b>${sel.friends.map(id=>{const o=byId(id);return esc(dispName(o))+(o&&o.cls?`（${o.cls}組）`:'');}).join('、')}</div>`:''}
+        ${sel.apart.length?`<div><b style="color:var(--ng)">離す：</b>${sel.apart.map(id=>{const o=byId(id);return esc(dispName(o))+(o&&o.cls?`（${o.cls}組）`:'');}).join('、')}</div>`:''}
+        ${sel.message?`<div class="muted" style="margin-top:6px;max-height:120px;overflow:auto">${nl2br(sel.message)}</div>`:''}
+        <div class="row" style="margin-top:8px"><button class="small" data-edit="${esc(sel.id)}">詳しく見る・修正</button><button class="small" data-act="unsel">選択を解除</button></div></div>`:''}
+      <div class="panel"><h2>実行ログ</h2><div class="log">${S.log.length?S.log.slice(0,80).map(l=>`<div><span class="muted">${esc(l.t)}</span> <b>${esc(l.kind)}</b> ${esc(l.target)} ${l.from!==''&&l.from!=null?`${esc(l.from)}→${esc(l.to)}`:''} <span class="muted">${esc(l.detail)}</span></div>`).join(''):'<span class="muted">まだありません</span>'}</div></div>
+    </div>
+  </div>`;
+  bindBoard(v);
+}
+function moveStudent(id, c){
+  const s=byId(id); if(!s || !isTarget(s)) return;
+  c=Number(c); if((s.cls||0)===c) return;
+  const from=s.cls||0; s.cls=c;
+  addLog('手動移動', dispName(s), from?from+'組':'未配置', c?c+'組':'未配置', '');
+  markDirty();
+}
+function bindBoard(v){
+  let dragId=null;
+  v.querySelectorAll('[data-card]').forEach(el=>{
+    el.addEventListener('dragstart',e=>{dragId=el.dataset.card; el.classList.add('dragging'); e.dataTransfer.setData('text/plain',dragId); e.dataTransfer.effectAllowed='move';});
+    el.addEventListener('dragend',()=>el.classList.remove('dragging'));
+  });
+  v.querySelectorAll('[data-col]').forEach(col=>{
+    col.addEventListener('dragover',e=>{e.preventDefault(); col.classList.add('drop');});
+    col.addEventListener('dragleave',e=>{ if(!col.contains(e.relatedTarget)) col.classList.remove('drop');});
+    col.addEventListener('drop',e=>{e.preventDefault(); col.classList.remove('drop'); const id=e.dataTransfer.getData('text/plain')||dragId; if(id){ moveStudent(id,col.dataset.col); selId=id; render(); }});
+  });
+  v.onclick=e=>{
+    const lk=e.target.closest('[data-lock]');
+    if(lk){ const s=byId(lk.dataset.lock); s.lock=!s.lock; if(s.lock && !s.cls){ s.lock=false; toast('未配置の児童は固定できません'); } markDirty(); render(); return; }
+    const cd=e.target.closest('[data-card]');
+    if(cd){ selId = selId===cd.dataset.card ? null : cd.dataset.card; render(); return; }
+    const col=e.target.closest('[data-col]');
+    if(col && selId && !e.target.closest('button')){ moveStudent(selId,col.dataset.col); render(); }
+  };
+}
+
+/* ---------- ④ 出力・印刷 ---------- */
+function sortedForPrint(){
+  const K=Number(S.settings.classCount);
+  let list=S.students.slice();
+  const sc=printOpt.scope;
+  if(sc==='sp') list=list.filter(s=>!isTarget(s));
+  else if(sc==='un') list=list.filter(s=>isTarget(s)&&!(s.cls>=1&&s.cls<=K));
+  else if(sc!=='all') list=list.filter(s=>isTarget(s)&&s.cls===Number(sc));
+  return list.sort((a,b)=>((a.cls||99)-(b.cls||99))||cmpKana(a,b));
+}
+function headerLine(){ const st=S.settings; return [st.yearLabel, st.school].filter(Boolean).map(esc).join('　'); }
+function markList(s, items){
+  return items.map(it=>{ const m=s.marks[it.k]; const n=s.notes[it.k]; if(m!=='◎'&&m!=='○'&&!n) return '';
+    return `<tr><th>${esc(it.l)}</th><td class="c" style="width:10mm">${m==='◎'||m==='○'?m:''}</td><td>${esc(n||'')}</td></tr>`; }).join('');
+}
+function buildPrint(){
+  const K=Number(S.settings.classCount); const kind=printOpt.kind; const pages=[];
+  const clsName=s=>isTarget(s)?(s.cls>=1&&s.cls<=K?s.cls+'組':'未配置'):'特支等';
+  if(kind==='roster'){
+    const classes=printOpt.scope==='all'?Array.from({length:K},(_,i)=>i+1):(Number(printOpt.scope)>0?[Number(printOpt.scope)]:[]);
+    classes.forEach(c=>{
+      const list=S.students.filter(s=>isTarget(s)&&s.cls===c).sort(cmpKana);
+      const m=list.filter(s=>s.sex==='男').length;
+      pages.push(`<div class="p-sub">${headerLine()}</div><div class="p-title">1年${c}組　学級名簿</div>
+        <div class="p-sub">${list.length}名（男${m}名・女${list.length-m}名）</div>
+        <table class="pt"><tr><th class="c">番号</th><th>氏名</th><th>ふりがな</th><th class="c">性別</th><th>生年月日</th><th>所属園</th>${printOpt.showLv?'<th class="c">配慮</th><th class="c">保護者</th>':''}<th>住所</th></tr>
+        ${list.map((s,i)=>`<tr><td class="c">${i+1}</td><td class="nw">${esc(s.name)}</td><td class="nw">${esc(s.kana)}</td><td class="c">${esc(s.sex)}</td><td class="nw">${fmtDob(s.dob)||esc(s.dobRaw)}</td><td>${esc(s.en)}</td>${printOpt.showLv?`<td class="c">${level(s)}</td><td class="c">${parLv(s)}</td>`:''}<td>${esc(s.addr)}</td></tr>`).join('')}</table>`);
+    });
+    if(printOpt.scope==='sp'||printOpt.scope==='all'){
+      const sp=S.students.filter(s=>!isTarget(s)).sort(cmpKana);
+      if(sp.length) pages.push(`<div class="p-sub">${headerLine()}</div><div class="p-title">特別支援学級等　名簿</div>
+        <table class="pt"><tr><th class="c">番号</th><th>氏名</th><th>ふりがな</th><th class="c">性別</th><th>生年月日</th><th>就学先</th><th>所属園</th><th>住所</th></tr>
+        ${sp.map((s,i)=>`<tr><td class="c">${i+1}</td><td>${esc(s.name)}</td><td>${esc(s.kana)}</td><td class="c">${esc(s.sex)}</td><td>${fmtDob(s.dob)||esc(s.dobRaw)}</td><td>${esc(s.dest)}</td><td>${esc(s.en)}</td><td>${esc(s.addr)}</td></tr>`).join('')}</table>`);
+    }
+  }
+  if(kind==='dismissal'){
+    const list=sortedForPrint(); const groups=new Map();
+    S.settings.dismissal.forEach(r=>groups.set(r,[])); const none=[];
+    list.forEach(s=>{const g=dismissalGroup(s.addr); if(g) groups.get(g).push(s); else none.push(s);});
+    let html=`<div class="p-sub">${headerLine()}</div><div class="p-title">下校グループ名簿</div>`;
+    const tbl=(arr)=>`<table class="pt"><tr><th class="c">組</th><th>氏名</th><th>ふりがな</th><th class="c">性別</th><th>生年月日</th><th>住所（参考）</th></tr>${arr.map(s=>`<tr><td class="c">${clsName(s)}</td><td>${esc(s.name)}</td><td>${esc(s.kana)}</td><td class="c">${esc(s.sex)}</td><td>${fmtDob(s.dob)||esc(s.dobRaw)}</td><td>${esc(s.addr)}</td></tr>`).join('')}</table>`;
+    for(const [r,arr] of groups){ if(!arr.length) continue;
+      html+=`<div style="break-inside:avoid"><div class="band" style="background:${esc(r.color)}">下校グループ：${esc(r.name)}（${esc(r.area)}）　／　${arr.length}名</div>${tbl(arr)}</div>`; }
+    if(none.length) html+=`<div style="break-inside:avoid"><div class="band" style="background:#d9d9d9">未割当（設定の区分に当てはまらない住所）　／　${none.length}名</div>${tbl(none)}</div>`;
+    pages.push(html);
+  }
+  if(kind==='karte'){
+    sortedForPrint().forEach(s=>{
+      pages.push(`<div class="karte"><div class="p-sub">${headerLine()}　個人カルテ</div>
+        <div class="p-title">${esc(s.name)}　<span style="font-size:11pt;font-weight:400">${esc(s.kana)}</span></div>
+        <table class="pt"><tr><th>ID</th><td>${esc(s.id)}</td><th>学級</th><td>${clsName(s)}</td></tr>
+          <tr><th>性別</th><td>${esc(s.sex)}</td><th>生年月日</th><td>${fmtDob(s.dob)||esc(s.dobRaw)}${isEarly(s)?'（早生まれ）':''}</td></tr>
+          <tr><th>所属園</th><td>${esc(s.en)}</td><th>就学先</th><td>${esc(s.dest)}</td></tr>
+          <tr><th>保護者氏名</th><td>${esc(s.guardian)}</td><th>下校グループ</th><td>${esc(dismissalGroup(s.addr)?.name||'未割当')}</td></tr>
+          <tr><th>住所</th><td colspan="3">${esc(s.addr)}</td></tr>
+          <tr><th>配慮レベル</th><td>${level(s)}${s.lvOverride?'（確定・自動'+autoLevel(s)+'）':''}</td><th>保護者対応</th><td>${parLv(s)}${s.parOverride?'（確定・自動'+autoPar(s)+'）':''}</td></tr></table>
+        <h5>Ａ 行動・発達</h5><table class="pt">${markList(s,A_ITEMS)||'<tr><td>特記なし</td></tr>'}${s.notes.A_extra?`<tr><th>補足</th><td colspan="2">${nl2br(s.notes.A_extra)}</td></tr>`:''}</table>
+        <h5>Ｂ 生活面</h5><table class="pt">${markList(s,B_ITEMS)||'<tr><td>特記なし</td></tr>'}</table>
+        <h5>Ｃ 人間関係</h5><table class="pt">${markList(s,C_ITEMS)}
+          <tr><th>仲の良い子</th><td colspan="2">${s.friends.map(id=>esc(dispName(byId(id)))).join('、')||'―'} ${esc(s.notes.friends||'')}</td></tr>
+          <tr><th>離したほうがよい子</th><td colspan="2">${s.apart.map(id=>esc(dispName(byId(id)))).join('、')||'―'} ${esc(s.notes.apart||'')}</td></tr></table>
+        <h5>Ｄ 総合</h5><table class="pt"><tr><th>特に気をつけて</th><td>${s.special?'該当　':''}${esc(s.notes.special||'')}</td></tr>
+          <tr><th>支援機関</th><td>${s.agency?'利用あり　':'―　'}${esc(s.agencyName)}</td></tr>
+          <tr><th>園から</th><td>${nl2br(s.message)}</td></tr></table>
+        <h5>Ｅ 家庭・保護者</h5><table class="pt">${markList(s,E_ITEMS)}
+          <tr><th>きょうだい</th><td colspan="2">${esc(s.sibling)||'―'}</td></tr><tr><th>家庭状況</th><td colspan="2">${nl2br(s.home)||'―'}</td></tr></table>
+        <h5>メモ</h5><div style="border:1px solid #555;min-height:28mm"></div></div>`);
+    });
+  }
+  if(kind==='tanpyo'){
+    const list=sortedForPrint(); const per=3;
+    for(let i=0;i<list.length;i+=per){
+      pages.push(list.slice(i,i+per).map(s=>{
+        const dbl=[...A_ITEMS,...B_ITEMS,...C_ITEMS].filter(it=>s.marks[it.k]==='◎'&&it.k!=='leader').map(it=>it.l);
+        const sgl=[...A_ITEMS,...B_ITEMS,...C_ITEMS].filter(it=>s.marks[it.k]==='○'&&it.k!=='leader').map(it=>it.l);
+        const fam=E_ITEMS.filter(it=>s.marks[it.k]==='◎'||s.marks[it.k]==='○').map(it=>it.l+s.marks[it.k]);
+        return `<div class="tanpyo"><table class="pt">
+          <tr><th>ID・学級</th><td>${esc(s.id)}　${clsName(s)}</td><th>氏名</th><td><b>${esc(s.name)}</b>（${esc(s.kana)}）</td><th>性別</th><td>${esc(s.sex)}</td></tr>
+          <tr><th>生年月日</th><td>${fmtDob(s.dob)||esc(s.dobRaw)}${isEarly(s)?'（早）':''}</td><th>所属園</th><td>${esc(s.en)}</td><th>リーダー</th><td>${isLeader(s)?s.marks.leader:'―'}</td></tr>
+          <tr><th>配慮／保護者</th><td>Lv${level(s)}／Lv${parLv(s)}</td><th>保護者・住所</th><td colspan="3">${esc(s.guardian)}　${esc(s.addr)}</td></tr>
+          <tr><th>◎ 要支援</th><td colspan="5">${esc(dbl.join('、'))||'―'}</td></tr>
+          <tr><th>○ 見守り</th><td colspan="5">${esc(sgl.join('、'))||'―'}</td></tr>
+          <tr><th>一緒／離す</th><td colspan="5">一緒：${s.friends.map(id=>esc(dispName(byId(id)))).join('、')||'―'}　／　離す：${s.apart.map(id=>esc(dispName(byId(id)))).join('、')||'―'}</td></tr>
+          <tr><th>家庭・保護者</th><td colspan="5">${esc(fam.join('、'))}${s.sibling?`　きょうだい：${esc(s.sibling)}`:''}${s.home?`<br>${nl2br(s.home)}`:''}</td></tr>
+          <tr><th>支援機関</th><td colspan="5">${s.agency?'あり　'+esc(s.agencyName):'―'}</td></tr>
+          <tr><th>園から</th><td colspan="5" style="font-size:8.5pt">${nl2br(s.message)}</td></tr></table></div>`;}).join(''));
+    }
+  }
+  if(kind==='summary'){
+    const cs=currentStats();
+    pages.push(`<div class="p-sub">${headerLine()}</div><div class="p-title">編制結果サマリ</div>
+      <div class="p-sub">作成：${new Date().toLocaleString('ja-JP')}　対象 ${cs.m.n}名（特別支援学級等を除く）</div>
+      <table class="pt"><tr><th>指標</th>${Array.from({length:K},(_,i)=>`<th class="c">${i+1}組</th>`).join('')}<th class="c">差</th><th class="c">判定</th></tr>
+      ${cs.rows.map(r=>`<tr><td>${esc(r.l)}</td>${r.vals.map(x=>`<td class="c">${+x.toFixed(1)}</td>`).join('')}<td class="c">${+r.diff.toFixed(1)}</td><td class="c">${r.ok?'○':'要確認'}</td></tr>`).join('')}</table>
+      <p>「離す」指定の未達成：${cs.viol.length}件${cs.viol.length?'（'+cs.viol.map(([a,b])=>esc(dispName(a))+'⇔'+esc(dispName(b))).join('、')+'）':''}</p>
+      <p>「仲の良い子」が別の学級：${cs.split.length}組</p>`);
+  }
+  return pages;
+}
+function renderPrint(v){
+  const K=Number(S.settings.classCount);
+  const scopeOpts=`<option value="all">全員</option>${Array.from({length:K},(_,i)=>`<option value="${i+1}">${i+1}組</option>`).join('')}<option value="un">未配置</option><option value="sp">特別支援学級等</option>`;
+  const pages=S.students.length?buildPrint():[];
+  v.innerHTML=`<div class="panel row" style="justify-content:space-between">
+    <div class="row">
+      <select id="pKind">
+        <option value="roster">クラス名簿</option><option value="dismissal">下校グループ名簿</option><option value="karte">個人カルテ（1人1枚）</option>
+        <option value="tanpyo">単票（1枚に3人）</option><option value="summary">編制結果サマリ</option></select>
+      <select id="pScope">${scopeOpts}</select>
+      ${printOpt.kind==='roster'?`<label><input type="checkbox" id="pLv" ${printOpt.showLv?'checked':''}> 配慮・保護者レベルの列を入れる</label>`:''}
+    </div>
+    <div class="row"><span class="muted">${pages.length}ページ</span><button class="primary" data-act="doPrint" ${pages.length?'':'disabled'}>印刷する</button></div>
+  </div>
+  <p class="muted">配慮レベルや家庭の情報を含む帳票です。印刷物の取り扱いに注意してください。PDFにしたい場合は、印刷画面でプリンターに「PDFに保存」を選びます。</p>
+  <div class="preview">${pages.map(p=>`<div class="page">${p}</div>`).join('')||'<div class="page">表示する内容がありません</div>'}</div>`;
+  $('#pKind').value=printOpt.kind; $('#pScope').value=printOpt.scope;
+  $('#pKind').onchange=e=>{printOpt.kind=e.target.value; render();};
+  $('#pScope').onchange=e=>{printOpt.scope=e.target.value; render();};
+  if($('#pLv')) $('#pLv').onchange=e=>{printOpt.showLv=e.target.checked; render();};
+}
+function doPrint(){
+  const pages=buildPrint();
+  $('#printArea').innerHTML=pages.map((p,i)=>`<div class="${i<pages.length-1?'pb':''}">${p}</div>`).join('');
+  window.print();
+}
+
+/* ---------- ⑤ 設定 ---------- */
+function renderSettings(v){
+  const st=S.settings;
+  v.innerHTML=`
+  <div class="panel"><h2>基本</h2><div class="fgrid">
+    <label>年度の表記（帳票の見出し）<input type="text" data-set="yearLabel" value="${esc(st.yearLabel)}" placeholder="例：令和9年度"></label>
+    <label>学校名（帳票の見出し）<input type="text" data-set="school" value="${esc(st.school)}"></label>
+    <label>編制する学級数<select data-set="classCount">${[2,3,4,5,6].map(n=>`<option ${Number(st.classCount)===n?'selected':''}>${n}</option>`).join('')}</select></label>
+    <label style="flex-direction:row;align-items:center;gap:6px;color:var(--ink)"><input type="checkbox" data-set="excludeSpecial" ${st.excludeSpecial?'checked':''}> 特別支援学級在籍・対象外の児童を編制から除く</label>
+  </div></div>
+  <div class="panel"><h2>均等化の項目（重みと許容差）</h2>
+    <p class="muted">「重み」が大きい項目ほど優先して均等にします（0にするとその項目は考えません）。「許容差」は、最大の組と最小の組の差がこれ以下なら ○ と判定する値です。</p>
+    <table class="grid" style="max-width:640px"><tr><th>項目</th><th class="c">重み</th><th class="c">許容差</th></tr>
+      ${st.crit.map((c,i)=>`<tr><td>${esc(c.l)}</td><td class="c"><input type="number" step="0.1" min="0" style="width:80px" data-crit="${i}|w" value="${c.w}"></td><td class="c"><input type="number" step="1" min="0" style="width:70px" data-crit="${i}|t" value="${c.t}"></td></tr>`).join('')}
+      <tr><td>居住地域（町・丁目ごとの人数）</td><td class="c"><input type="number" step="0.1" min="0" style="width:80px" data-set="wArea" value="${st.wArea}"></td><td class="c muted">―</td></tr>
+      <tr><td>所属園（園ごとの人数）</td><td class="c"><input type="number" step="0.1" min="0" style="width:80px" data-set="wEn" value="${st.wEn}"></td><td class="c muted">―</td></tr>
+      <tr><td>「仲の良い子」が別の学級になる（1組あたり）</td><td class="c"><input type="number" step="1" min="0" style="width:80px" data-set="wFriend" value="${st.wFriend}"></td><td class="c muted">―</td></tr>
+      <tr><td>「離したほうがよい子」が同じ学級になる</td><td class="c muted">絶対条件</td><td class="c muted">―</td></tr>
+    </table>
+    <div style="margin-top:8px"><button data-act="resetCrit">重み・許容差を初期値に戻す</button></div>
+  </div>
+  <div class="panel"><h2>下校グループの区分</h2>
+    <p class="muted">住所に「町名」が含まれ、その後ろの丁目が「丁目」欄の数字のどれかに当てはまる児童を、そのグループに入れます（上の行から順に判定）。丁目を空欄にすると、その町名すべてが対象です。</p>
+    <table class="grid"><tr><th>グループ名</th><th>表示する地域名</th><th>町名</th><th>丁目（カンマ区切り）</th><th>色</th><th></th></tr>
+      ${st.dismissal.map((r,i)=>`<tr><td><input type="text" data-dis="${i}|name" value="${esc(r.name)}" style="width:100px"></td><td><input type="text" data-dis="${i}|area" value="${esc(r.area)}"></td>
+        <td><input type="text" data-dis="${i}|town" value="${esc(r.town)}" style="width:120px"></td><td><input type="text" data-dis="${i}|chome" value="${esc(r.chome)}" style="width:100px"></td>
+        <td><input type="color" data-dis="${i}|color" value="${esc(r.color)}"></td>
+        <td><button class="small" data-dis-up="${i}" ${i===0?'disabled':''}>↑</button> <button class="small danger" data-dis-del="${i}">削除</button></td></tr>`).join('')}
+    </table><div style="margin-top:8px"><button data-act="disAdd">＋ グループを追加</button></div>
+    ${S.students.length?`<p class="muted">現在のデータで未割当になる児童：${S.students.filter(s=>!dismissalGroup(s.addr)).length}名</p>`:''}
+  </div>
+  <div class="panel"><h2>データ</h2>
+    <div class="row"><button class="danger" data-act="wipe">すべてのデータを消去する</button><span class="muted">児童データ・編制結果・ログを消去します（設定は残ります）。</span></div>
+  </div>`;
+  v.onchange=e=>{
+    const el=e.target;
+    if(el.dataset.set){ const k=el.dataset.set; st[k]=el.type==='checkbox'?el.checked:(['classCount','wArea','wEn','wFriend'].includes(k)?Number(el.value):el.value);
+      if(k==='classCount'){ const K=Number(el.value); S.students.forEach(s=>{if(s.cls>K){s.cls=0;s.lock=false;}}); }
+      markDirty(); if(k==='classCount') render(); }
+    if(el.dataset.crit){ const [i,f]=el.dataset.crit.split('|'); st.crit[i][f]=Number(el.value); markDirty(); }
+    if(el.dataset.dis){ const [i,f]=el.dataset.dis.split('|'); st.dismissal[i][f]=el.value; markDirty(); render(); }
+  };
+}
+
+/* ---------- 使い方 ---------- */
+function renderHelp(v){
+  v.innerHTML=`<div class="panel" style="max-width:900px;line-height:1.8">
+  <h2>使い方</h2>
+  <ol>
+    <li><b>データを用意する</b>：「Excelから取込」で昨年度までの「学級編制シート」（①引継ぎ入力）を読み込むか、①児童データで「＋児童を追加」から入力します。</li>
+    <li><b>聞き取り内容を入力する</b>：聞き取りシート1枚（1園）分は「② 園別一括入力」で、マスをクリックして ◎／○／なし を入れるのが速いです。具体的な様子や「仲の良い子」「離したほうがよい子」は、氏名をクリックして詳細画面で入力します（相手は名簿から選びます）。</li>
+    <li><b>レベルを確認する</b>：配慮レベル・保護者対応レベルは自動で判定されます。実態と合わないときは、詳細画面の「確定」で上書きします。</li>
+    <li><b>編制する</b>：「③ 編制・調整」で「自動編制（最初から）」を押します。結果はドラッグで手直しでき、バランス表がその場で更新されます。動かしたくない児童は🔓で固定してから「今の配置を改善」を押すと、残りの児童だけで調整し直します。</li>
+    <li><b>印刷する</b>：「④ 出力・印刷」でクラス名簿・下校グループ・個人カルテ・単票・サマリを印刷できます。</li>
+    <li><b>保存する</b>：右上の「保存（JSON）」でファイルに保存します。<u>このアプリはブラウザ内にデータを残しません</u>。作業の区切りごとに必ず保存し、次回は「データを開く」で続きから作業してください。</li>
+  </ol>
+  <h2>判定ルール（聞き取りシート【聞き取り後の処理】に準拠）</h2>
+  <table class="grid" style="max-width:820px">
+    <tr><th>配慮レベル</th><td>Ａ行動・発達（8項目）、Ｂ生活面（5項目）、Ｃトラブルの傾向 の印を数えます。<br>レベル3：◎が2つ以上　／　レベル2：◎が1つ、または○が3つ以上　／　レベル1：それ以外<br><span class="muted">リーダー性・仲の良い子・Ｄ総合は算入しません。</span></td></tr>
+    <tr><th>保護者対応レベル</th><td>Ｅ欄の4項目（連絡・要望／伝達／提出物・送迎／認識の差）の ◎ の数で判定します。<br>レベル3：3つ以上　／　レベル2：2つ以上　／　レベル1：1つ以下<br><span class="muted">○（傾向あり）と相談歴は記録のみで、判定には使いません。</span></td></tr>
+    <tr><th>人間関係</th><td>「離したほうがよい子」は必ず別の学級にします（絶対条件）。「仲の良い子」はできるだけ同じ学級にしますが、ほかのバランスを優先することがあります。</td></tr>
+    <tr><th>早生まれ</th><td>1月1日〜4月1日生まれ。</td></tr>
+  </table>
+  <h2>Excelから取り込むときの読み替え</h2>
+  <table class="grid" style="max-width:820px">
+    <tr><th>行動・発達</th><td>要支援→◎、見守り→○、「―」→なし（支援への反応：変化なし・拒む→◎、手を添える等→○、声かけで戻れる→なし）</td></tr>
+    <tr><th>生活面</th><td>よくある→◎、ときどき→○、「―」→なし</td></tr>
+    <tr><th>家庭・保護者</th><td>非常に多い／難しい／不備が多い／大きな差→◎、多い／ときどき難しい／ときどき不備／やや差→○</td></tr>
+    <tr><th>確定レベル</th><td>シートの「配慮レベル（確定）」「保護者対応レベル（確定）」が新しい自動判定と違う場合は、確定値として引き継ぎます。</td></tr>
+    <tr><th>人間関係</th><td>氏名を名簿と照合します（全角・半角スペースや 邉／辺、髙／高 などの違いは同じとみなします）。照合できなかった名前は①児童データの上部に一覧で出ます。</td></tr>
+  </table>
+  <p class="muted">学級編制アプリ ver.${APP_VERSION}　／　インターネット接続なしで動作します（Microsoft Edge・Google Chrome 推奨）。</p></div>`;
+}
+
+/* =====================================================================
+   ファイル入出力・イベント
+   ===================================================================== */
+function saveJson(){
+  const d=new Date(), p=n=>String(n).padStart(2,'0');
+  const name=`学級編制データ_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`;
+  const data={app:'学級編制アプリ', version:APP_VERSION, savedAt:d.toISOString(), settings:S.settings, students:S.students, log:S.log};
+  const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
+  fileName=name; dirty=false; updateFileInfo(); toast('保存しました：'+name);
+}
+function loadJson(text, name){
+  const d=JSON.parse(text);
+  if(!d || !Array.isArray(d.students)) throw new Error('学級編制アプリのデータではありません');
+  const set=Object.assign(defaultSettings(), d.settings||{});
+  const def=defaultSettings();
+  set.crit=def.crit.map(c=>Object.assign({}, c, (d.settings?.crit||[]).find(x=>x.k===c.k)||{}, {l:c.l}));
+  S={settings:set, students:d.students.map(x=>{ const s=Object.assign(blankStudent(x.id), x); s.id=String(s.id);
+      s.marks=Object.assign(blankStudent(0).marks, x.marks||{}); s.notes=x.notes||{}; s.unmatched=x.unmatched||{friends:[],apart:[]};
+      s.friends=(x.friends||[]).map(String); s.apart=(x.apart||[]).map(String); return s; }), log:d.log||[]};
+  fileName=name; dirty=false; selId=null;
+}
+function confirmDiscard(){ return !dirty || !S.students.length || confirm('保存していない変更があります。破棄して続けますか？'); }
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab]'); if(t){ tab=t.dataset.tab; render(); return; }
+  const ed=e.target.closest('[data-edit]'); if(ed && !e.target.closest('dialog')){ e.preventDefault(); openEditor(ed.dataset.edit); return; }
+  const u=e.target.closest('[data-unm-ok],[data-unm-del]');
+  if(u){
+    const key=u.dataset.unmOk||u.dataset.unmDel; const [id,k,ix]=key.split('|'); const s=byId(id);
+    if(u.dataset.unmOk){ const sel=document.querySelector(`[data-unm-sel="${CSS.escape(key)}"]`); if(!sel.value){toast('相手を選んでください');return;}
+      const other=k==='friends'?'apart':'friends';
+      if(s[other].includes(sel.value)){ alert('同じ相手がもう一方の欄にも入っています。'); return; }
+      addRel(k,id,sel.value); }
+    s.unmatched[k].splice(Number(ix),1); markDirty(); render(); return;
+  }
+  const a=e.target.closest('[data-act]'); if(!a) return;
+  const act=a.dataset.act;
+  if(act==='importXlsx') $('#fileXlsx').click();
+  if(act==='openJson') $('#fileJson').click();
+  if(act==='add'){ const s=blankStudent(nextId()); if(dataFilter.en) s.en=dataFilter.en; S.students.push(s); markDirty(); openEditor(s.id,true); }
+  if(act==='fillNone'){
+    let list=S.students; if(dataFilter.en) list=list.filter(s=>s.en===dataFilter.en);
+    if(dataFilter.dest==='reg') list=list.filter(s=>s.dest==='通常学級'); if(dataFilter.dest==='sp') list=list.filter(s=>s.dest!=='通常学級');
+    if(!confirm(`${list.length}名分の未記入の項目を「なし」にします。聞き取りで該当なしと確認できている場合だけ実行してください。`)) return;
+    list.forEach(s=>MARK_KEYS.forEach(k=>{ if(!s.marks[k]) s.marks[k]='なし'; })); markDirty(); render(); }
+  if(act==='mxFill'){
+    const list=S.students.filter(s=>mxEn==='*'||s.en===mxEn);
+    if(!confirm(`この表の ${list.length}名分の未記入を「なし」にします。`)) return;
+    list.forEach(s=>MARK_KEYS.forEach(k=>{ if(!s.marks[k]) s.marks[k]='なし'; })); markDirty(); render(); }
+  if(act==='runFresh'){
+    const placed=S.students.some(s=>isTarget(s)&&s.cls>0&&!s.lock);
+    if(placed && !confirm('固定（🔒）していない児童の配置をやり直します。手動で調整した内容も変わります。よろしいですか？')) return;
+    a.disabled=true; a.textContent='計算中…'; setTimeout(()=>runFormation('fresh'),30); }
+  if(act==='runImprove'){ a.disabled=true; a.textContent='計算中…'; setTimeout(()=>runFormation('improve'),30); }
+  if(act==='unlockAll'){ S.students.forEach(s=>s.lock=false); markDirty(); render(); }
+  if(act==='clearCls'){ if(!confirm('すべての児童の配置と固定を解除します。よろしいですか？')) return; S.students.forEach(s=>{s.cls=0;s.lock=false;}); addLog('解除','全員','','','配置をすべて解除'); markDirty(); render(); }
+  if(act==='unsel'){ selId=null; render(); }
+  if(act==='doPrint') doPrint();
+  if(act==='resetCrit'){ S.settings.crit=defaultSettings().crit; const d=defaultSettings(); S.settings.wArea=d.wArea; S.settings.wEn=d.wEn; S.settings.wFriend=d.wFriend; markDirty(); render(); }
+  if(act==='disAdd'){ S.settings.dismissal.push({name:'新しいグループ',area:'',color:'#dddddd',town:'',chome:''}); markDirty(); render(); }
+  if(act==='wipe'){ if(!confirm('すべての児童データと編制結果を消去します。元に戻せません。よろしいですか？')) return; S.students=[]; S.log=[]; markDirty(); render(); }
+});
+document.addEventListener('click',e=>{
+  const d=e.target.closest('[data-dis-del]'); if(d){ S.settings.dismissal.splice(Number(d.dataset.disDel),1); markDirty(); render(); }
+  const u=e.target.closest('[data-dis-up]'); if(u){ const i=Number(u.dataset.disUp); const a=S.settings.dismissal; [a[i-1],a[i]]=[a[i],a[i-1]]; markDirty(); render(); }
+});
+$('#btnImportXlsx').onclick=()=>{ if(confirmDiscard()) $('#fileXlsx').click(); };
+$('#btnOpen').onclick=()=>{ if(confirmDiscard()) $('#fileJson').click(); };
+$('#btnSave').onclick=()=>{ if(!S.students.length && !confirm('児童データが空です。保存しますか？')) return; saveJson(); };
+$('#btnNew').onclick=()=>{ if(!confirmDiscard()) return; S={settings:defaultSettings(), students:[], log:[]}; fileName=''; dirty=false; selId=null; tab='data'; render(); };
+$('#fileXlsx').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(S.students.length && !confirm('現在の児童データを、Excelの内容で置き換えます。よろしいですか？')) return;
+  try{
+    const r=await importExcel(f); fileName=''; dirty=true; tab='data'; selId=null; render();
+    alert(`取り込みが完了しました（シート「${r.sheet}」）\n\n・児童 ${r.n}名（うち特別支援学級・対象外 ${r.special}名）\n・配慮レベルの確定値を引き継いだ児童 ${r.lvOv}名\n・保護者対応レベルの確定値を引き継いだ児童 ${r.parOv}名\n・照合できなかった名前 ${r.unmatched}件` + (r.dobNg.length?`\n・生年月日を読み取れなかった児童 ${r.dobNg.length}名`:'') + `\n\n取り込んだ内容は、まだファイルに保存されていません。右上の「保存（JSON）」で保存してください。`);
+  }catch(err){ alert('取り込みに失敗しました：\n'+err.message); }
+};
+$('#fileJson').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{ loadJson(await f.text(), f.name); tab='data'; render(); toast('読み込みました：'+f.name); }
+  catch(err){ alert('読み込みに失敗しました：\n'+err.message); }
+};
+window.addEventListener('beforeunload',e=>{ if(dirty && S.students.length){ e.preventDefault(); e.returnValue=''; } });
+render();
+</script>
+</body>
+</html>
