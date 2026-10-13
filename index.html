@@ -529,7 +529,7 @@ async function importExcel(file){
     s.marks.resp=mapMark(IMPORT_MAP.resp,get(row,'支援への反応'));
     for(const [k,h] of Object.entries(B_HDR)) s.marks[k]=mapMark(IMPORT_MAP.B,get(row,h));
     s.notes.health=str(row,'健康面（記述）');
-    s.notes.A_extra=str(row,'Ｂ補足（具体的な様子）');
+    s.notes.A_extra=str(row,'Ａ補足（具体的な様子）')||str(row,'Ｂ補足（具体的な様子）');
     s.marks.leader=mapMark(IMPORT_MAP.leader,get(row,'リーダー性'));
     s.marks.trouble=mapMark(IMPORT_MAP.trouble,get(row,'トラブルの傾向'));
     for(const [k,h] of Object.entries(E_HDR)) s.marks[k]=mapMark(IMPORT_MAP[k],get(row,h));
