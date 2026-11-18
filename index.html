@@ -129,6 +129,8 @@ th.gA{background:#e9f0f6!important} th.gB{background:#eef5ea!important} th.gC{ba
 .mv{display:inline-block;font-size:11px;font-weight:700;border-radius:3px;padding:0 4px;line-height:16px;margin-right:4px;border:1px solid}
 .mv.in{background:#e6f4ea;color:#1e6b34;border-color:#9fd0ad}
 .mv.out{background:#fde8e8;color:#a33;border-color:#eaa8a8}
+/* 就学時健診を本校以外で受けた児童 */
+.tag.ks{background:#fff1e0;color:#8a4b00;border-color:#f0c48a}
 .card .lk{border:none;background:transparent;padding:0 2px;font-size:13px;opacity:.35}
 .card .lk.on{opacity:1}
 .card.locked{background:#f6f6f2}
@@ -205,7 +207,7 @@ table.pt td.c,table.pt th.c{text-align:center}
 <script>
 'use strict';
 /* =====================================================================
-   学級編制アプリ  ver.1.3
+   学級編制アプリ  ver.1.4
    ・データは JSON ファイルで保存（ブラウザ内には保存しない）
    ・判定ルールは「就学前引継ぎ 聞き取りシート」の【聞き取り後の処理】に準拠
      配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
@@ -215,7 +217,7 @@ table.pt td.c,table.pt th.c{text-align:center}
    ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
    ===================================================================== */
 
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.4';
 const APP_UPDATED = '2026-11-18';
 const MARKS = ['', 'なし', '○', '◎'];
 const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
@@ -295,7 +297,7 @@ let printOpt = {kind:'roster', scope:'all', showLv:false};
 
 function blankStudent(id){
   const s = {id:String(id), kana:'', name:'', dob:'', dobRaw:'', sex:'', en:'', guardian:'', addr:'', dest:'通常学級',
-    marks:{}, notes:{}, friends:[], apart:[], special:false, agency:false, agencyName:'', sibling:'', home:'', message:'', move:'',
+    marks:{}, notes:{}, friends:[], apart:[], special:false, agency:false, agencyName:'', sibling:'', home:'', message:'', move:'', kenshinOther:false, kenshinPlace:'',
     lvOverride:null, parOverride:null, cls:0, lock:false, unmatched:{friends:[], apart:[]}};
   MARK_KEYS.forEach(k=>s.marks[k]='');
   return s;
@@ -801,7 +803,7 @@ function renderData(v){
       ${list.map(s=>{
         const dbl=LV_KEYS.filter(k=>s.marks[k]==='◎').length, sgl=LV_KEYS.filter(k=>s.marks[k]==='○').length, bl=blankCount(s);
         return `<tr class="clickable" data-edit="${esc(s.id)}">
-          <td class="c" style="white-space:nowrap">${moveMark(s)}${esc(s.id)}</td><td><b>${esc(s.name)}</b>${s.special?' <span class="badge lv3" title="特に気をつけてほしい児童">特</span>':''}${s.agency?' <span class="badge lv1" title="支援機関の利用あり">機</span>':''}</td><td>${esc(s.kana)}</td>
+          <td class="c" style="white-space:nowrap">${moveMark(s)}${esc(s.id)}</td><td><b>${esc(s.name)}</b>${s.special?' <span class="badge lv3" title="特に気をつけてほしい児童">特</span>':''}${s.agency?' <span class="badge lv1" title="支援機関の利用あり">機</span>':''}${s.kenshinOther?` <span class="tag ks" title="就学時健診の受診先：${esc(s.kenshinPlace||'（学校名未入力）')}">健診：他校</span>`:''}</td><td>${esc(s.kana)}</td>
           <td class="c" style="color:${s.sex==='男'?'var(--male)':s.sex==='女'?'var(--female)':'var(--ng)'}">${esc(s.sex||'未')}</td>
           <td>${s.dob?fmtDob(s.dob)+(isEarly(s)?' <span class="tag ea">早</span>':''):`<span style="color:var(--ng)">${esc(s.dobRaw||'未入力')}</span>`}</td>
           <td>${esc(s.en)}</td><td>${s.dest==='通常学級'?'通常':`<span class="badge lv2">${esc(s.dest)}</span>`}</td>
@@ -852,6 +854,8 @@ function openEditor(id, isNew){
       </div>
       <div class="sec"><h4>基本情報</h4><div class="in fgrid">
         <label>ID<input type="text" data-f="id" value="${esc(s.id)}"></label>
+        <label>就学時健診の受診先<select data-f="kenshinOther"><option value="" ${s.kenshinOther?'':'selected'}>本校</option><option value="1" ${s.kenshinOther?'selected':''}>本校以外</option></select></label>
+        ${s.kenshinOther?`<label>受診した学校名<input type="text" data-f="kenshinPlace" value="${esc(s.kenshinPlace)}" placeholder="例：〇〇小学校"></label>`:''}
         <label>入学前の転入・転出<select data-f="move">${MOVES.map(m=>`<option value="${m.v}" ${(s.move||'')===m.v?'selected':''}>${m.l}</option>`).join('')}</select></label>
         <label>漢字氏名<input type="text" data-f="name" value="${esc(s.name)}"></label>
         <label>かな氏名<input type="text" data-f="kana" value="${esc(s.kana)}"></label>
@@ -918,9 +922,10 @@ function openEditor(id, isNew){
         const old=s.id; S.students.forEach(x=>{x.friends=x.friends.map(i=>i===old?v:i);x.apart=x.apart.map(i=>i===old?v:i);}); s.id=v; }
       else if(f==='lvOverride'||f==='parOverride') s[f]=v?Number(v):null;
       else if(f==='dob'){ s.dob=v; s.dobRaw=''; }
+      else if(f==='kenshinOther') s.kenshinOther=(v==='1');   // 本校以外のときだけ学校名の欄を出す
       else s[f]=v;
       markDirty();
-      if(['lvOverride','parOverride','name','dob','dest'].includes(f)){ const y=d.scrollTop; draw(); d.scrollTop=y; }
+      if(['lvOverride','parOverride','name','dob','dest','kenshinOther'].includes(f)){ const y=d.scrollTop; draw(); d.scrollTop=y; }
     }
     if(el.dataset.note){ s.notes[el.dataset.note]=el.value; markDirty(); }
   };
@@ -1292,7 +1297,8 @@ function loadJson(text, name){
   S={settings:set, students:d.students.map(x=>{ const s=Object.assign(blankStudent(x.id), x); s.id=String(s.id);
       s.marks=Object.assign(blankStudent(0).marks, x.marks||{}); s.notes=x.notes||{}; s.unmatched=x.unmatched||{friends:[],apart:[]};
       s.friends=(x.friends||[]).map(String); s.apart=(x.apart||[]).map(String);
-      if(!['','入','出'].includes(s.move)) s.move=''; return s; }), log:d.log||[]};
+      if(!['','入','出'].includes(s.move)) s.move='';
+      s.kenshinOther=!!s.kenshinOther; s.kenshinPlace=String(s.kenshinPlace||''); return s; }), log:d.log||[]};
   fileName=name; dirty=false; selId=null;
 }
 function confirmDiscard(){ return !dirty || !S.students.length || confirm('保存していない変更があります。破棄して続けますか？'); }
