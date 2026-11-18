@@ -186,9 +186,11 @@ table.pt td.c,table.pt th.c{text-align:center}
   <button id="btnNew">新規</button>
   <button id="btnTemplate" title="聞き取り内容を入力するための空のExcel">入力用Excel（原版）</button>
   <button id="btnImportXlsx">Excelから取込</button>
+  <button id="btnHearing" title="園ごとの聞き取りシート（Word）の出力と読み込み">聞き取りシート（Word）</button>
   <button id="btnOpen">データを開く（JSON）</button>
   <button id="btnSave" class="primary">保存（JSON）</button>
   <input type="file" id="fileXlsx" accept=".xlsx,.xlsm" hidden>
+  <input type="file" id="fileDocx" accept=".docx" hidden>
   <input type="file" id="fileJson" accept=".json,application/json" hidden>
 </header>
 <nav class="tabs" id="tabs">
@@ -207,9 +209,9 @@ table.pt td.c,table.pt th.c{text-align:center}
 <script>
 'use strict';
 /* =====================================================================
-   学級編制アプリ  ver.1.5
+   学級編制アプリ  ver.1.6
    ・データは JSON ファイルで保存（ブラウザ内には保存しない）
-   ・判定ルールは「就学前引継ぎ 聞き取りシート」の【聞き取り後の処理】に準拠
+   ・判定ルール（聞き取りシートの判定欄は v1.6 でなくした。判定はアプリだけで行う）
      配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
                    ◎2以上→3 ／ ◎1 または ○3以上→2 ／ それ以外→1
      保護者対応  ：E欄4項目（連絡・伝達・提出物・認識差）の ◎の数
@@ -217,7 +219,7 @@ table.pt td.c,table.pt th.c{text-align:center}
    ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
    ===================================================================== */
 
-const APP_VERSION = '1.5';
+const APP_VERSION = '1.6';
 const APP_UPDATED = '2026-11-18';
 const MARKS = ['', 'なし', '○', '◎'];
 const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
@@ -637,6 +639,436 @@ function importMerge(p, fname){
 }
 
 /* =====================================================================
+   聞き取りシート（Word .docx）の出力と読み込み（ver.1.6〜）
+   ・1園につき1枚。各項目は「1行＝1人」（項目｜児童名｜◎○｜具体的な様子）
+   ・児童名と◎○は Word のプルダウン（コンテンツコントロールのコンボボックス）。
+     名簿にない名前は直接入力もできる
+   ・読み込むときは、左の列の項目名（太字の1行目）で項目を見分ける。
+     下の行（縦に結合した行・項目名が空の行）は、上の項目の続きとして読む
+   ・外部ライブラリは使わない（ZIPは無圧縮で作る。読み込みは unzip() を使う）
+   ===================================================================== */
+const HS_ROWS = 3;     // 1項目あたりの記入行（足りなければ Word で行を挿入できる）
+const HS_PH = '▼選ぶ'; // プルダウンの初めの表示（読み込むときは空欄として扱う）
+/* kind：mark＝◎○を付ける／pair＝相手の児童名を選ぶ／flag＝該当する児童を挙げる／text＝児童ごとに内容を書く */
+const HS_SECS = [
+  {t:'Ａ　行動・発達', mh:'要支援＝◎\n見守り＝○', items:A_ITEMS.map(x=>({k:x.k, l:x.l, h:x.h, kind:'mark'}))},
+  {t:'Ｂ　生活面', mh:'要支援＝◎\n見守り＝○', items:B_ITEMS.map(x=>({k:x.k, l:x.l, h:x.h, kind:'mark'}))},
+  {t:'Ｃ　人間関係　※学級編制で最も参考にする項目です。必ず「なし」まで確認してください', mh:'要支援＝◎\n見守り＝○', items:[
+    ...C_ITEMS.map(x=>({k:x.k, l:x.l, h:x.h, kind:'mark'})),
+    {k:'friends', l:'仲の良い子', h:'同じ小学校へ進む子同士の組み合わせ', kind:'pair'},
+    {k:'apart',   l:'離したほうがよい子', h:'組み合わせと、その理由', kind:'pair'}]},
+  {t:'Ｄ　総合', items:[
+    {k:'special', l:'特に気をつけてほしい児童', h:'優先度の高い順にお聞きする', kind:'flag'},
+    {k:'agency',  l:'支援機関を利用している児童', h:'療育・巡回相談・通院など（機関名・診断名）', kind:'flag'},
+    {k:'message', l:'園から特に伝えたいこと', h:'良さ・強みも含めて', kind:'text'}]},
+  {t:'Ｅ　家庭・保護者　※入学直後の連絡体制を整えるための情報です', mh:'要配慮＝◎\n傾向あり＝○', items:[
+    {k:'e_contact', l:'連絡・要望が多いご家庭', h:'園への問い合わせや要望の多さ', kind:'mark'},
+    {k:'e_comm',    l:'園からの伝達が通りにくいご家庭', h:'子どもの様子を伝えたときの受け止め', kind:'mark'},
+    {k:'e_docs',    l:'提出物・持ち物・送迎に不備が多いご家庭', h:'期限や準備が整っているか', kind:'mark'},
+    {k:'e_gap',     l:'園の見立てと保護者の受け止めに差があるご家庭', h:'発達や就学についての認識', kind:'mark'},
+    {k:'e_consult', l:'就学・発達の相談歴があるご家庭', h:'園・行政・医療機関等への相談', kind:'mark'},
+    {k:'sibling',   l:'きょうだいが本校に在籍', h:'氏名と学年', kind:'text'},
+    {k:'home',      l:'家庭状況で配慮が必要なご家庭', h:'差し支えない範囲で結構です', kind:'text'}]},
+];
+const HS_ITEMS = HS_SECS.flatMap(s=>s.items);
+const nz = v => String(v??'').replace(/[\s　]/g,'');
+/* 項目名 → 項目（アプリ側の項目名でも読めるようにする。例：E欄の「連絡・要望が多い」） */
+const HS_BYLABEL = {};
+HS_ITEMS.forEach(it=>{ HS_BYLABEL[nz(it.l)]=it; });
+[...A_ITEMS, ...B_ITEMS, ...C_ITEMS, ...E_ITEMS].forEach(x=>{ const it=HS_ITEMS.find(i=>i.k===x.k); if(it && !HS_BYLABEL[nz(x.l)]) HS_BYLABEL[nz(x.l)]=it; });
+HS_BYLABEL[nz('支援機関の利用')]=HS_ITEMS.find(i=>i.k==='agency');
+HS_BYLABEL[nz('園から特に伝えたいこと（良さ・強みも含めて）')]=HS_ITEMS.find(i=>i.k==='message');
+const HS_HEAD = {'園名':'en', '聞き取り日':'date', '園側ご出席者':'att', '本校聞き取り者':'who'};
+
+/* ---------- Word の XML を組み立てる小さな関数 ---------- */
+const X = v => String(v ?? '').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function wr(t, o={}){   // 文字の並び（run）
+  const rp=(o.b?'<w:b/>':'')+(o.color?`<w:color w:val="${o.color}"/>`:'')+(o.sz?`<w:sz w:val="${o.sz}"/><w:szCs w:val="${o.sz}"/>`:'');
+  return String(t).split('\n').map((line,i)=>`${i?'<w:r><w:br/></w:r>':''}<w:r>${rp?`<w:rPr>${rp}</w:rPr>`:''}<w:t xml:space="preserve">${X(line)}</w:t></w:r>`).join('');
+}
+function wp(runs, o={}){   // 段落
+  const pp=(o.keep?'<w:keepNext/>':'')+`<w:spacing w:before="${o.before||0}" w:after="${o.after||0}"/>`+(o.jc?`<w:jc w:val="${o.jc}"/>`:'');
+  return `<w:p><w:pPr>${pp}</w:pPr>${runs||''}</w:p>`;
+}
+function wtc(w, body, o={}){   // セル
+  const pr=`<w:tcW w:w="${w}" w:type="dxa"/>`+(o.span?`<w:gridSpan w:val="${o.span}"/>`:'')
+    +(o.vm?`<w:vMerge${o.vm==='restart'?' w:val="restart"':''}/>`:'')
+    +(o.fill?`<w:shd w:val="clear" w:color="auto" w:fill="${o.fill}"/>`:'')+`<w:vAlign w:val="${o.va||'center'}"/>`;
+  return `<w:tc><w:tcPr>${pr}</w:tcPr>${body||wp('')}</w:tc>`;
+}
+function wtr(cells, o={}){   // 行（cantSplit：ページの境目で行を分けない）
+  return `<w:tr><w:trPr><w:cantSplit/>${o.h?`<w:trHeight w:val="${o.h}"/>`:''}${o.head?'<w:tblHeader/>':''}</w:trPr>${cells.join('')}</w:tr>`;
+}
+function wtbl(grid, rows){
+  const b=n=>`<w:${n} w:val="single" w:sz="4" w:space="0" w:color="7F7F7F"/>`;
+  return `<w:tbl><w:tblPr><w:tblW w:w="${grid.reduce((a,c)=>a+c,0)}" w:type="dxa"/><w:tblBorders>${['top','left','bottom','right','insideH','insideV'].map(b).join('')}</w:tblBorders>`
+    +`<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="70" w:type="dxa"/><w:right w:w="70" w:type="dxa"/></w:tblCellMar></w:tblPr>`
+    +`<w:tblGrid>${grid.map(g=>`<w:gridCol w:w="${g}"/>`).join('')}</w:tblGrid>${rows.join('')}</w:tbl>`;
+}
+let hsSdtId = 1;
+function wcombo(tag, alias, items){   // プルダウン（コンボボックス：選ぶことも、直接書くこともできる）
+  return `<w:sdt><w:sdtPr><w:alias w:val="${X(alias)}"/><w:tag w:val="${tag}"/><w:id w:val="${700000+(hsSdtId++)}"/><w:showingPlcHdr/>`
+    +`<w:comboBox>${items.map(i=>`<w:listItem w:displayText="${X(i.d)}" w:value="${X(i.v)}"/>`).join('')}</w:comboBox></w:sdtPr>`
+    +`<w:sdtContent>${wr(HS_PH,{color:'A6A6A6'})}</w:sdtContent></w:sdt>`;
+}
+
+/* その園の名簿から、児童名のプルダウンの選択肢を作る（同じ氏名がいるときは「氏名（かな）」） */
+function hsNameItems(pool){
+  const cnt={}; pool.forEach(s=>{ const n=normName(s.name||s.kana); cnt[n]=(cnt[n]||0)+1; });
+  return [{d:'なし', v:'none'}, ...pool.map(s=>{ const nm=s.name||s.kana; return {d: cnt[normName(nm)]>1 && s.kana ? `${nm}（${s.kana}）` : nm, v:'id:'+s.id}; })];
+}
+
+/* 聞き取りシートの document.xml を作る（en が空なら、名簿なしの空のシート） */
+function hsDocumentXml(en){
+  hsSdtId=1;
+  const pool = en ? S.students.filter(s=>s.en===en).sort(cmpKana) : [];
+  const names = hsNameItems(pool);
+  const marks = [{d:'◎', v:'dbl'}, {d:'○', v:'sgl'}];
+  const W = 10206;               // 本文の幅（A4・余白 15mm）
+  const G = [2500, 2200, 1100, 4406];
+  const GP = [2500, 2000, 2000, 3706];
+  const out = [];
+  const sp = h=>out.push(wp('', {after:h||80}));
+  // 見出し
+  out.push(wp(wr('新1年生　就学前引継ぎ　聞き取りシート', {b:true, sz:30}), {jc:'center', after:40}));
+  out.push(wp(wr(`${S.settings.school?S.settings.school+'　':''}教務部　　※本校担当者が記入します（1園につき1枚）`, {sz:18}), {jc:'center', after:120}));
+  // 園名など
+  const nM=pool.filter(s=>s.sex==='男').length, nF=pool.filter(s=>s.sex==='女').length;
+  const H=[2100, 3100, 1900, 3106];
+  const hcell=(i,t,o)=>wtc(H[i], wp(wr(t,o||{sz:18})), i%2===0?{fill:'D9D9D9'}:{});
+  out.push(wtbl(H, [
+    wtr([hcell(0,'園　名',{b:true,sz:18}), hcell(1,en||'',{sz:20}), hcell(2,'聞き取り日',{b:true,sz:18}), hcell(3,'令和　　年　　月　　日')], {h:480}),
+    wtr([hcell(0,'園側ご出席者',{b:true,sz:18}), hcell(1,''), hcell(2,'本校聞き取り者',{b:true,sz:18}), hcell(3,'')], {h:480}),
+    wtr([hcell(0,'本園からの入学予定児童数',{b:true,sz:18}), hcell(1, pool.length?`${pool.length}名（男${nM}名／女${nF}名）`:'　　　名（男　　名／女　　名）'), hcell(2,'特別支援学級希望',{b:true,sz:18}), hcell(3,'あり（　　名）　・　なし')], {h:480}),
+  ]));
+  sp(120);
+  // 記入について
+  const how = [
+    '・児童名の欄は「▼選ぶ」を押して、この園の名簿から選びます。名簿にない児童は、氏名を直接入力できます。',
+    '・該当する児童がいない項目は、児童名の欄で「なし」を選びます。空欄だと「該当なし」か「聞き忘れ」か区別できないためです。',
+    '・◎○の欄も「▼選ぶ」から選びます。1行に1人です。行が足りないときは、行の中で右クリック →［挿入］→［下に行を挿入］で増やせます（1つの欄に「、」で区切って何人か書くこともできます。そのときは同じ◎○になります）。',
+    '・仲の良い子・離したほうがよい子は、「児童名」と「相手の児童名」に1人ずつ入れます。',
+    '・左の列の項目名（太字）は変えないでください。学級編制アプリは項目名で読み取ります。',
+  ];
+  out.push(wtbl([W], [wtr([wtc(W, wp(wr('【記入について】',{b:true,sz:18}))+how.map(t=>wp(wr(t,{sz:17}))).join(''), {fill:'FFF2CC'})])]));
+  sp(120);
+  // 名簿（2列に分けて並べる）
+  if(pool.length){
+    const R=Math.ceil(pool.length/2), RG=[460, 2100, 1960, 582];
+    const g=[...RG, ...RG];
+    const head=[...Array(2)].flatMap(()=>['No','氏名','ふりがな','性別'].map((t,i)=>wtc(RG[i], wp(wr(t,{b:true,sz:17}),{jc:'center'}), {fill:'D9D9D9'})));
+    const rows=[wtr([wtc(W, wp(wr(`本園から入学予定の児童（学級編制アプリの名簿・${pool.length}名）`,{b:true,sz:20,color:'FFFFFF'})), {span:8, fill:'595959'})], {head:true}), wtr(head,{head:true})];
+    for(let r=0;r<R;r++){
+      const cells=[];
+      for(const i of [r, r+R]){
+        const s=pool[i];
+        cells.push(wtc(RG[0], wp(wr(s?String(i+1):'',{sz:17}),{jc:'center'})), wtc(RG[1], wp(wr(s?s.name:'',{sz:18}))), wtc(RG[2], wp(wr(s?s.kana:'',{sz:16}))), wtc(RG[3], wp(wr(s?s.sex:'',{sz:17}),{jc:'center'})));
+      }
+      rows.push(wtr(cells,{h:300}));
+    }
+    out.push(wtbl(g, rows)); sp(160);
+  }
+  // 項目の表
+  // keep：同じ項目の行がページの境目で分かれないように、次の行と同じページに置く
+  const label = (it,keep)=>wp(wr(it.l,{b:true,sz:18}),{keep})+wp(wr(it.h,{sz:15,color:'595959'}),{keep});
+  const nameP = keep=>wp(wcombo('hs-name','児童名',names),{keep});
+  const markP = keep=>wp(wcombo('hs-mark','◎○',marks),{jc:'center', keep});
+  for(const sec of HS_SECS){
+    // 表の見出し（kind ごと）：mark＝◎○の列あり／pair＝相手の児童名の列あり／plain＝児童名と内容だけ
+    const hd=(t,w,o)=>wtc(w, wp(wr(t,{b:true,sz:(o&&o.sz)||17}),{jc:'center'}), Object.assign({fill:'D9D9D9'}, o||{}));
+    const colHead = k => k==='pair' ? wtr(['項　目','児童名','相手の児童名','理由・具体的な様子'].map((t,i)=>hd(t,GP[i])), {head:true})
+      : k==='mark' ? wtr([hd('項　目',G[0]), hd('該当する児童名',G[1]), hd(sec.mh,G[2],{sz:15}), hd('具体的な様子・エピソード',G[3])], {head:true})
+      : wtr([hd('項　目',G[0]), hd('該当する児童名',G[1]), hd('具体的な様子・エピソード',G[2]+G[3],{span:2})], {head:true});
+    const title = (t)=>wtr([wtc(W, wp(wr(t,{b:true,sz:20,color:'FFFFFF'})), {span:4, fill:'595959'})], {head:true});
+    let rows=null, grid=null, lastKind='';
+    const flush=()=>{ if(rows){ out.push(wtbl(grid, rows)); sp(120); } };
+    for(const it of sec.items){
+      const kind = it.kind==='pair' ? 'pair' : it.kind==='mark' ? 'mark' : 'plain';
+      if(kind!==lastKind){
+        // 列の組み立て（kind）が変わるところで別の表にする（ページごとにくり返す見出しが混ざらないように）
+        flush(); grid = kind==='pair'?GP:G;
+        rows=[title(rows ? sec.t.split('　※')[0]+'（つづき）' : sec.t), colHead(kind)]; lastKind=kind;
+      }
+      for(let r=0;r<HS_ROWS;r++){
+        const k = r<HS_ROWS-1;
+        const first = wtc(grid[0], r===0?label(it,k):wp('',{keep:k}), {vm:r===0?'restart':'cont', fill:'F2F2F2', va:'top'});
+        let cells;
+        if(kind==='pair') cells=[first, wtc(GP[1], nameP(k)), wtc(GP[2], nameP(k)), wtc(GP[3], wp('',{keep:k}))];
+        else if(kind==='mark') cells=[first, wtc(G[1], nameP(k)), wtc(G[2], markP(k)), wtc(G[3], wp('',{keep:k}))];
+        else cells=[first, wtc(G[1], nameP(k)), wtc(G[2]+G[3], wp('',{keep:k}), {span:2})];
+        rows.push(wtr(cells, {h:380}));
+      }
+    }
+    flush(); sp(60);
+  }
+  // 本校記入欄
+  out.push(wtbl([2500, 7706], [
+    wtr([wtc(10206, wp(wr('【本校記入欄】聞き取り後の処理',{b:true,sz:20,color:'FFFFFF'})), {span:2, fill:'595959'})]),
+    wtr([wtc(2500, wp(wr('学級編制アプリへの取り込み',{b:true,sz:18})), {fill:'F2F2F2'}), wtc(7706, wp(wr('□ 済（　　月　　日　担当：　　　　　　）　　□ 未了',{sz:18})))], {h:420}),
+    wtr([wtc(2500, wp(wr('要フォロー事項',{b:true,sz:18})), {fill:'F2F2F2', va:'top'}), wtc(7706, wp(''))], {h:1400}),
+  ]));
+  out.push(wp(wr(`学級編制アプリ ver.${APP_VERSION} で出力（${new Date().toLocaleDateString('ja-JP')}）。配慮レベル・保護者対応レベルはアプリが判定します。`,{sz:14,color:'7F7F7F'}),{before:80, jc:'right'}));
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`
+    +`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>`
+    +out.join('')
+    +`<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="850" w:bottom="850" w:left="850" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+}
+
+/* ZIP（無圧縮）を作る：Word はこの形式でも開ける */
+function crc32(u8){
+  let t=crc32.t; if(!t){ t=crc32.t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=c&1?0xEDB88320^(c>>>1):c>>>1; t[n]=c>>>0; } }
+  let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c=t[(c^u8[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0;
+}
+function zipStore(files, type){
+  const enc=new TextEncoder(), parts=[], central=[]; let off=0;
+  for(const f of files){
+    const nm=enc.encode(f.name), d=enc.encode(f.data), crc=crc32(d);
+    const h=new DataView(new ArrayBuffer(30));
+    h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(12,0x21,true);
+    h.setUint32(14,crc,true); h.setUint32(18,d.length,true); h.setUint32(22,d.length,true); h.setUint16(26,nm.length,true);
+    parts.push(h.buffer, nm, d);
+    const c=new DataView(new ArrayBuffer(46));
+    c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x0800,true); c.setUint16(14,0x21,true);
+    c.setUint32(16,crc,true); c.setUint32(20,d.length,true); c.setUint32(24,d.length,true); c.setUint16(28,nm.length,true); c.setUint32(42,off,true);
+    central.push(c.buffer, nm);
+    off+=30+nm.length+d.length;
+  }
+  const size=central.reduce((a,b)=>a+b.byteLength,0);
+  const e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true); e.setUint16(8,files.length,true); e.setUint16(10,files.length,true); e.setUint32(12,size,true); e.setUint32(16,off,true);
+  return new Blob([...parts, ...central, e.buffer], {type});
+}
+function hsDocxBlob(en){
+  const ns='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const font='BIZ UDPゴシック';
+  return zipStore([
+    {name:'[Content_Types].xml', data:head+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>'},
+    {name:'_rels/.rels', data:head+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>'},
+    {name:'word/_rels/document.xml.rels', data:head+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>'},
+    {name:'word/styles.xml', data:head+`<w:styles ${ns}><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:eastAsia="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:kern w:val="2"/><w:sz w:val="18"/><w:szCs w:val="18"/><w:lang w:val="en-US" w:eastAsia="ja-JP" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="a"><w:name w:val="Normal"/><w:qFormat/></w:style></w:styles>`},
+    {name:'word/settings.xml', data:head+`<w:settings ${ns}><w:defaultTabStop w:val="840"/><w:characterSpacingControl w:val="compressPunctuation"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`},
+    {name:'word/document.xml', data:hsDocumentXml(en)},
+  ], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}
+function downloadHearing(en){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(hsDocxBlob(en));
+  a.download=`聞き取りシート_${en||'空のシート'}.docx`; document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
+  toast('聞き取りシートを出力しました'+(en?'：'+en:''));
+}
+
+/* ---------- 読み込み ---------- */
+/* 直接の子（コンテンツコントロールなどで包まれていても見つける） */
+function dchild(el, name){
+  const out=[];
+  (function walk(p){ for(const c of p.children){ if(c.localName===name) out.push(c); else if(['sdt','sdtContent','customXml','smartTag'].includes(c.localName)) walk(c); } })(el);
+  return out;
+}
+/* セルの文字と、中のプルダウンの選択肢を読む（初めの表示「▼選ぶ」のままのものは空欄） */
+function hsCell(tc){
+  const items=[]; let vm='';
+  const pr=dchild(tc,'tcPr')[0]; if(pr){ const v=dchild(pr,'vMerge')[0]; if(v) vm=(v.getAttribute('w:val')||v.getAttributeNS('*','val')||'continue'); }
+  const paras=[];
+  for(const p of kids(tc,'p')){
+    let t='';
+    (function walk(el){
+      for(const c of el.children){
+        const n=c.localName;
+        if(n==='sdt'){
+          const sp=dchild(c,'sdtPr')[0];
+          if(sp) kids(sp,'listItem').forEach(li=>items.push({d:li.getAttribute('w:displayText')||'', v:li.getAttribute('w:value')||''}));
+          if(sp && dchild(sp,'showingPlcHdr').length) continue;
+          const sc=dchild(c,'sdtContent')[0]; if(sc) walk(sc); continue;
+        }
+        if(n==='del'||n==='instrText'||n==='pPr'||n==='rPr'||n==='sdtPr') continue;
+        if(n==='t') t+=c.textContent; else if(n==='tab') t+=' '; else if(n==='br') t+='\n'; else walk(c);
+      }
+    })(p);
+    paras.push(t);
+  }
+  const text=paras.join('\n').split(HS_PH).join('').replace(/\n+$/,'').trim();
+  return {text, label:nz(paras.find(x=>nz(x))||''), first:nz(paras[0]||''), items, vm};
+}
+const hsSplit = t => String(t||'').split(/[、,，\/／\n;；]+/).map(x=>x.trim()).filter(Boolean);
+const hsNone = t => ['なし','無し','該当なし','ー','―','－','-'].includes(nz(t));
+function hsMark(t){ const s=String(t||''); return s.includes('◎') ? '◎' : /[○〇◯]/.test(s) ? '○' : ''; }
+
+async function parseHearingDocx(file){
+  const z=await unzip(await file.arrayBuffer());
+  const x=z.has('word/document.xml') ? await z.text('word/document.xml') : null;
+  if(!x) throw new Error('Wordファイル（.docx）として読み込めませんでした。');
+  const doc=xml(x);
+  const head={en:'', date:'', att:'', who:''}, rows=[];
+  for(const tbl of kids(doc,'tbl')){
+    let cur=null;
+    for(const tr of dchild(tbl,'tr')){
+      const cells=dchild(tr,'tc').map(hsCell); if(!cells.length) continue;
+      cells.forEach((c,i)=>{ const k=HS_HEAD[c.label]; if(k && cells[i+1] && !head[k]) head[k]=cells[i+1].text; });
+      const it=HS_BYLABEL[cells[0].first];
+      if(it){ cur=it; rows.push({it, cells}); continue; }
+      if(cur && (cells[0].vm==='continue' || !cells[0].label)){ rows.push({it:cur, cells}); continue; }
+      cur=null;
+    }
+  }
+  if(!rows.length) throw new Error('聞き取りシートの項目が見つかりませんでした。学級編制アプリから出力した聞き取りシート（Word）を使ってください。');
+  if(!/[0-9０-９]/.test(head.date)) head.date='';
+  return {head, rows, file:file.name};
+}
+/* 名前 → 児童（①プルダウンの選択肢 ②その園の名簿で完全一致 ③「氏名（かな）」 ④その園で部分一致（1人に決まるとき） ⑤全体で完全一致） */
+function hsResolve(t, cell, pool){
+  const li=cell.items.find(i=>nz(i.d)===nz(t) && i.v.startsWith('id:'));
+  if(li){ const s=byId(li.v.slice(3)); if(s) return s; }
+  const n=normName(t); if(!n) return null;
+  let ex=pool.filter(s=>normName(s.name)===n || normName(s.kana)===n); if(ex.length===1) return ex[0];
+  const m=t.match(/^(.+?)[（(](.+)[）)]$/);
+  if(m){ ex=pool.filter(s=>normName(s.name)===normName(m[1]) && normName(s.kana)===normName(m[2])); if(ex.length===1) return ex[0]; }
+  ex=pool.filter(s=>normName(s.name).includes(n) || (n.length>=2 && normName(s.kana).includes(n))); if(ex.length===1) return ex[0];
+  ex=S.students.filter(s=>normName(s.name)===n || normName(s.kana)===n); if(ex.length===1) return ex[0];
+  return null;
+}
+/* 読み取った内容を、まだアプリに入れずに整理する（確認画面で見せる） */
+function planHearing(parsed, en){
+  const pool=S.students.filter(s=>s.en===en);
+  const P={en, head:parsed.head, file:parsed.file, pool, slots:{}, unmatched:[], noMark:[], noPartner:[], conflicts:[], blank:[], kids:new Set()};
+  HS_ITEMS.forEach(it=>P.slots[it.k]={it, touched:false, entries:[], pairs:[]});
+  for(const {it, cells:c} of parsed.rows){
+    const slot=P.slots[it.k], nameCell=c[1]; if(!nameCell) continue;
+    const toks=hsSplit(nameCell.text); if(!toks.length) continue;
+    slot.touched=true;
+    const text=(c.length>=3 ? c[c.length-1].text : '').trim();
+    const mk0=it.kind==='mark' && c.length>=4 ? hsMark(c[2].text) : '';
+    const ss=[];
+    for(let t of toks){
+      if(hsNone(t)) continue;
+      let mk=mk0;
+      const m=t.match(/^(.+?)[\s　]*[（(]?([◎○〇◯])[）)]?$/); if(m){ t=m[1]; if(!mk) mk=hsMark(m[2]); }
+      const s=hsResolve(t, nameCell, pool);
+      if(!s){ P.unmatched.push({l:it.l, name:t}); continue; }
+      ss.push(s); P.kids.add(s);
+      if(it.kind==='mark' && !mk) P.noMark.push({l:it.l, name:dispName(s)});
+      if(it.kind!=='pair') slot.entries.push({s, mark:mk, text: it.kind==='mark' && c.length<4 ? '' : text});
+    }
+    if(it.kind==='pair'){
+      const ps=[];
+      hsSplit(c[2]?.text).filter(t=>!hsNone(t)).forEach(t=>{ const s=hsResolve(t, c[2], pool); if(s){ ps.push(s); P.kids.add(s); } else P.unmatched.push({l:it.l+'（相手）', name:t}); });
+      if(ps.length) ss.forEach(a=>ps.forEach(b=>{ if(a!==b) slot.pairs.push({a, b, text}); }));
+      else if(ss.length>=2) ss.forEach((a,i)=>ss.slice(i+1).forEach(b=>slot.pairs.push({a, b, text})));   // 1つの欄に何人か書いたとき
+      else if(ss.length===1) P.noPartner.push({l:it.l, name:dispName(ss[0])});
+    }
+  }
+  for(const it of HS_ITEMS){
+    const slot=P.slots[it.k];
+    if(!slot.touched){ P.blank.push(it); continue; }
+    if(it.kind==='mark'){
+      const listed=new Set(slot.entries.map(e=>e.s));
+      pool.filter(s=>!listed.has(s) && (s.marks[it.k]==='◎'||s.marks[it.k]==='○'))
+        .forEach(s=>P.conflicts.push({l:it.l, name:dispName(s), m:s.marks[it.k]}));
+    }
+  }
+  return P;
+}
+/* 整理した内容をアプリのデータに入れる
+   ・名前が出た児童：シートの◎○・内容で書き換える（シートで空欄のところは、アプリの内容を残す）
+   ・記入があった◎○の項目で、名前が出なかったその園の児童：未記入なら「なし」にする（◎○が入っていれば残す）
+   ・何も記入がない項目（聞き忘れ）は、だれも変えない */
+function applyHearing(P){
+  const R={kids:P.kids.size, marks:0, none:0, rel:0, relNg:[]};
+  const setNote=(s,k,arr)=>{ const t=[...new Set(arr.filter(Boolean))].join('／'); if(t) s.notes[k]=t; };
+  for(const it of HS_ITEMS){
+    const slot=P.slots[it.k]; if(!slot.touched) continue;
+    const by=new Map(); slot.entries.forEach(e=>{ if(!by.has(e.s)) by.set(e.s,[]); by.get(e.s).push(e); });
+    if(it.kind==='mark'){
+      by.forEach((es,s)=>{ const mk=es.some(e=>e.mark==='◎')?'◎':es.some(e=>e.mark==='○')?'○':''; if(mk && s.marks[it.k]!==mk){ s.marks[it.k]=mk; R.marks++; } setNote(s, it.k, es.map(e=>e.text)); });
+      P.pool.forEach(s=>{ if(!by.has(s) && !s.marks[it.k]){ s.marks[it.k]='なし'; R.none++; } });
+    }
+    if(it.kind==='pair'){
+      const other=it.k==='friends'?'apart':'friends';
+      const notes=new Map();
+      slot.pairs.forEach(({a,b,text})=>{
+        if(a[other].includes(b.id)){ R.relNg.push(`${dispName(a)}と${dispName(b)}（もう一方の欄に入っています）`); return; }
+        if(!a[it.k].includes(b.id)) R.rel++;
+        addRel(it.k, a.id, b.id);
+        [a,b].forEach(s=>{ if(!notes.has(s)) notes.set(s,[]); notes.get(s).push(text); });
+      });
+      notes.forEach((arr,s)=>setNote(s, it.k, arr));
+    }
+    if(it.k==='special'){ const list=[...by.keys()]; list.forEach((s,i)=>{ s.special=true; const t=by.get(s).map(e=>e.text).filter(Boolean).join('／'); const pre=list.length>1?`優先${i+1}`:''; if(t||pre) s.notes.special=[pre,t].filter(Boolean).join('　'); }); }
+    if(it.k==='agency'){ by.forEach((es,s)=>{ s.agency=true; const t=[...new Set(es.map(e=>e.text).filter(Boolean))].join('／'); if(t) s.agencyName=t; }); }
+    if(['message','sibling','home'].includes(it.k)){ by.forEach((es,s)=>{ const t=[...new Set(es.map(e=>e.text).filter(Boolean))].join('\n'); if(t) s[it.k]=t; else if(!s[it.k] && it.k!=='message') s[it.k]='該当（内容は未記入）'; }); }
+  }
+  const h=P.head;
+  addLog('聞き取り', P.en, '', '', `聞き取りシートを取込（${P.file}${h.date?'・聞き取り日 '+h.date:''}${h.who?'・聞き取り者 '+h.who:''}）：${R.kids}名に反映`);
+  return R;
+}
+
+/* ---------- 画面 ---------- */
+function openHearingDlg(){
+  const d=$('#dlg'); const ens=enList();
+  const cur = (tab==='matrix' && mxEn && mxEn!=='*') ? mxEn : (ens[0]||'');
+  d.innerHTML=`<div class="dlg-head"><h3>聞き取りシート（Word）</h3><button type="button" data-hs="close">閉じる</button></div>
+  <div class="dlg-body" style="max-width:680px;line-height:1.8">
+    <div class="panel" style="margin:0 0 10px"><b>① 聞き取りシートを出力する</b>
+      <p class="muted" style="margin:2px 0 6px">園を選ぶと、その園の名簿（氏名・ふりがな・性別）と、児童名のプルダウンが入ったシートになります。1園につき1枚です。</p>
+      <div class="row"><select id="hsEn">${ens.map(e=>`<option ${e===cur?'selected':''}>${esc(e)}</option>`).join('')}<option value="">（名簿なしの空のシート）</option></select>
+        <button type="button" class="primary" data-hs="out">Wordで出力</button></div></div>
+    <div class="panel" style="margin:0"><b>② 記入した聞き取りシートを読み込む</b>
+      <p class="muted" style="margin:2px 0 6px">読み込む前に、読み取った内容の確認画面が出ます。アプリの児童データ（名簿）を先に取り込んでおいてください。</p>
+      <button type="button" data-hs="in" ${S.students.length?'':'disabled'}>聞き取りシートを読み込む（.docx）</button>
+      ${S.students.length?'':'<span class="muted" style="color:var(--warn)">児童データがないため読み込めません</span>'}</div>
+  </div>`;
+  d.onclick=e=>{ const b=e.target.closest('[data-hs]'); if(!b) return;
+    if(b.dataset.hs==='close') d.close();
+    if(b.dataset.hs==='out') downloadHearing($('#hsEn').value);
+    if(b.dataset.hs==='in'){ d.close(); $('#fileDocx').click(); } };
+  d.onchange=null; d.onclose=null;
+  d.showModal();
+}
+/* 確認画面：読み取った内容を見せて、「取り込む」でアプリに入れる */
+function showHearingPreview(parsed){
+  const ens=enList();
+  let en=ens.find(e=>nz(e)===nz(parsed.head.en)) || '';
+  const d=$('#dlg');
+  const li=(arr,f)=>arr.length?`<ul style="margin:2px 0 6px">${arr.slice(0,30).map(x=>`<li>${f(x)}</li>`).join('')}${arr.length>30?`<li>…ほか${arr.length-30}件</li>`:''}</ul>`:'';
+  const draw=()=>{
+    const P=en?planHearing(parsed,en):null;
+    const nItems=HS_ITEMS.length;
+    d.innerHTML=`<div class="dlg-head"><h3>聞き取りシートの読み込み：確認</h3><button type="button" data-hp="cancel">やめる</button><button type="button" class="primary" data-hp="ok" ${P?'':'disabled'}>取り込む</button></div>
+    <div class="dlg-body" style="max-width:720px;line-height:1.7">
+      <p>ファイル：${esc(parsed.file)}　シートの園名：<b>${esc(parsed.head.en||'（空欄）')}</b>${parsed.head.date?`　聞き取り日：${esc(parsed.head.date)}`:''}</p>
+      <div class="row"><b>取り込む園：</b><select id="hpEn"><option value="">― 選んでください ―</option>${ens.map(e=>`<option ${e===en?'selected':''}>${esc(e)}</option>`).join('')}</select>
+        ${!en?'<span style="color:var(--warn)">シートの園名と同じ園がアプリにありません。取り込む園を選んでください。</span>':''}</div>
+      ${P?`
+      <div class="panel" style="margin:8px 0">
+        アプリの名簿でこの園の児童：<b>${P.pool.length}名</b>　／　シートに名前が出た児童：<b>${P.kids.size}名</b>　／　記入があった項目：<b>${nItems-P.blank.length}</b> / ${nItems}
+      </div>
+      ${P.blank.length?`<div class="alert warn"><b>記入がない項目（${P.blank.length}）</b>　聞き忘れかもしれません。この項目はだれのデータも変えません。${P.blank.some(i=>['leader','trouble','friends','apart'].includes(i.k))?'<br><b>Ｃ 人間関係</b>の項目が含まれています（学級編制で最も参考にする項目です）。':''}
+        <div>${P.blank.map(i=>esc(i.l)).join('、')}</div></div>`:''}
+      ${P.unmatched.length?`<div class="alert warn"><b>名簿の児童と照合できなかった名前（${P.unmatched.length}）</b>　取り込みません。氏名を確かめてください。${li(P.unmatched,x=>`${esc(x.l)}：${esc(x.name)}`)}</div>`:''}
+      ${P.noMark.length?`<div class="alert warn"><b>◎○が空欄（${P.noMark.length}）</b>　◎○はアプリの今の内容を残します。${li(P.noMark,x=>`${esc(x.l)}：${esc(x.name)}`)}</div>`:''}
+      ${P.noPartner.length?`<div class="alert warn"><b>相手の児童名が空欄（${P.noPartner.length}）</b>　組み合わせは取り込みません。${li(P.noPartner,x=>`${esc(x.l)}：${esc(x.name)}`)}</div>`:''}
+      ${P.conflicts.length?`<div class="alert"><b>アプリでは◎○が付いているが、シートには名前がない（${P.conflicts.length}）</b>　アプリの◎○を残します。必要なら児童の情報で直してください。${li(P.conflicts,x=>`${esc(x.l)}：${esc(x.name)}（アプリ ${x.m}）`)}</div>`:''}
+      <details><summary>読み取った内容を見る</summary>${HS_ITEMS.filter(it=>P.slots[it.k].touched).map(it=>{ const sl=P.slots[it.k];
+        const body = it.kind==='pair' ? sl.pairs.map(p=>`${esc(dispName(p.a))} と ${esc(dispName(p.b))}${p.text?'：'+esc(p.text):''}`)
+                   : sl.entries.map(e=>`${esc(dispName(e.s))}${e.mark?' '+e.mark:''}${e.text?'：'+esc(e.text):''}`);
+        return `<div style="margin:4px 0"><b>${esc(it.l)}</b>　${body.length?body.join('<br>　'):'なし'}</div>`; }).join('')}</details>
+      <p class="muted">取り込み方：名前が出た児童は、シートの◎○と内容で書き換えます（シートで空欄のところはアプリの内容を残します）。記入があった◎○の項目で名前が出なかったこの園の児童は、未記入なら「なし」にします。</p>`:''}
+    </div>`;
+    d._P=P;
+  };
+  draw();
+  d.onchange=e=>{ if(e.target.id==='hpEn'){ en=e.target.value; draw(); } };
+  d.onclick=e=>{ const b=e.target.closest('[data-hp]'); if(!b) return;
+    if(b.dataset.hp==='cancel'){ d.close(); return; }
+    if(b.dataset.hp==='ok' && d._P){
+      const R=applyHearing(d._P); markDirty(); d.close(); tab='matrix'; mxEn=d._P.en; render();
+      alert(`聞き取りシートを取り込みました（${d._P.en}）\n\n・シートに名前が出た児童 ${R.kids}名\n・◎○を書き換えたところ ${R.marks}か所\n・「なし」にしたところ ${R.none}か所\n・仲の良い子／離す の組み合わせを追加 ${R.rel}組`+(R.relNg.length?`\n・取り込まなかった組み合わせ ${R.relNg.length}組：\n　${R.relNg.join('\n　')}`:'')+`\n\n取り込んだ内容は、まだファイルに保存されていません。右上の「保存（JSON）」で保存してください。`);
+    } };
+  d.onclose=null;
+  d.showModal();
+}
+
+/* =====================================================================
    編制エンジン
    ===================================================================== */
 function buildModel(){
@@ -1000,7 +1432,7 @@ function renderMatrix(v){
     <div class="row" style="justify-content:space-between">
       <div class="row"><b>園：</b><select id="mxEn">${ens.map(e=>`<option ${e===mxEn?'selected':''}>${esc(e)}</option>`).join('')}<option value="*" ${mxEn==='*'?'selected':''}>（全員）</option></select>
         <span class="muted">${list.length}名</span></div>
-      <div class="row"><button data-act="mxFill">この表の未記入をすべて「なし」にする</button></div>
+      <div class="row"><button data-act="hsOut">この園の聞き取りシートを出力（Word）</button><button data-act="hsIn">聞き取りシートを読み込む</button><button data-act="mxFill">この表の未記入をすべて「なし」にする</button></div>
     </div>
     <p class="muted" style="margin:6px 0 10px">聞き取りシート1枚（1園）分をまとめて入力する画面です。マスをクリックするたびに　未記入 → なし → ○ → ◎ → 未記入　と切り替わります。右クリックで逆回り。氏名をクリックすると詳細入力が開きます。</p>
     <div class="mx-wrap"><table class="mx">
@@ -1298,12 +1730,13 @@ function renderHelp(v){
   <ol>
     <li><b>データを用意する</b>：右上の「入力用Excel（原版）」で空のExcelを出力し、聞き取り内容を1人1行で入力して「Excelから取込」で読み込みます。①児童データの「＋児童を追加」から直接入力することもできます。</li>
     <li><b>聞き取り内容を入力する</b>：聞き取りシート1枚（1園）分は「② 園別一括入力」で、マスをクリックして ◎／○／なし を入れるのが速いです。具体的な様子や「仲の良い子」「離したほうがよい子」は、氏名をクリックして詳細画面で入力します（相手は名簿から選びます）。</li>
+    <li><b>聞き取りシート（Word）を使う</b>：右上の「聞き取りシート（Word）」で園を選んで出力すると、その園の名簿と、児童名・◎○のプルダウンが入ったシートになります（1園につき1枚、1行に1人）。記入したシートを同じ画面から読み込むと、確認画面のあとで児童データに入ります。名前が出た児童はシートの◎○と内容で書き換え（シートで空欄のところはアプリの内容を残す）、記入があった項目で名前が出なかったその園の児童は、未記入なら「なし」にします。記入がない項目（聞き忘れ）は変えません。</li>
     <li><b>レベルを確認する</b>：配慮レベル・保護者対応レベルは自動で判定されます。実態と合わないときは、詳細画面の「確定」で上書きします。</li>
     <li><b>編制する</b>：「③ 編制・調整」で「自動編制（最初から）」を押します。結果はドラッグで手直しでき、バランス表がその場で更新されます。動かしたくない児童は🔓で固定してから「今の配置を改善」を押すと、残りの児童だけで調整し直します。</li>
     <li><b>印刷する</b>：「④ 出力・印刷」でクラス名簿・下校グループ・個人カルテ・単票・サマリを印刷できます。</li>
     <li><b>保存する</b>：右上の「保存（JSON）」でファイルに保存します。<u>このアプリはブラウザ内にデータを残しません</u>。作業の区切りごとに必ず保存し、次回は「データを開く」で続きから作業してください。</li>
   </ol>
-  <h2>判定ルール（聞き取りシート【聞き取り後の処理】に準拠）</h2>
+  <h2>判定ルール</h2>
   <table class="grid" style="max-width:820px">
     <tr><th>配慮レベル</th><td>Ａ行動・発達（8項目）、Ｂ生活面（5項目）、Ｃトラブルの傾向 の印を数えます。<br>レベル3：◎が2つ以上　／　レベル2：◎が1つ、または○が3つ以上　／　レベル1：それ以外<br><span class="muted">リーダー性・仲の良い子・Ｄ総合は算入しません。</span></td></tr>
     <tr><th>保護者対応レベル</th><td>Ｅ欄の4項目（連絡・要望／伝達／提出物・送迎／認識の差）の ◎ の数で判定します。<br>レベル3：3つ以上　／　レベル2：2つ以上　／　レベル1：1つ以下<br><span class="muted">○（傾向あり）と相談歴は記録のみで、判定には使いません。</span></td></tr>
@@ -1375,6 +1808,9 @@ document.addEventListener('click',e=>{
   const act=a.dataset.act;
   if(act==='importXlsx') startImport();
   if(act==='template') downloadTemplate();
+  if(act==='hsOut') downloadHearing(mxEn==='*'?'':mxEn);
+  if(act==='hsIn') $('#fileDocx').click();
+  if(act==='hsDlg') openHearingDlg();
   if(act==='openJson') $('#fileJson').click();
   if(act==='add'){ const s=blankStudent(nextId()); if(dataFilter.en) s.en=dataFilter.en; S.students.push(s); markDirty(); openEditor(s.id,true); }
   if(act==='fillNone'){
@@ -1436,6 +1872,14 @@ function startImport(){
   d.showModal();
 }
 $('#btnImportXlsx').onclick=startImport;
+$('#btnHearing').onclick=openHearingDlg;
+/* 聞き取りシート（Word）を読み込む → 確認画面 */
+$('#fileDocx').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(!S.students.length){ alert('児童データがありません。先にExcel（引継ぎシート）などで名簿を取り込んでください。'); return; }
+  try{ showHearingPreview(await parseHearingDocx(f)); }
+  catch(err){ alert('聞き取りシートを読み込めませんでした：\n'+err.message); }
+};
 $('#btnOpen').onclick=()=>{ if(confirmDiscard()) $('#fileJson').click(); };
 $('#btnSave').onclick=()=>{ if(!S.students.length && !confirm('児童データが空です。保存しますか？')) return; saveJson(); };
 $('#btnNew').onclick=()=>{ if(!confirmDiscard()) return; S={settings:defaultSettings(), students:[], log:[]}; fileName=''; dirty=false; selId=null; tab='data'; render(); };
