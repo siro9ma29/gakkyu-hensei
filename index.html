@@ -209,7 +209,7 @@ table.pt td.c,table.pt th.c{text-align:center}
 <script>
 'use strict';
 /* =====================================================================
-   学級編制アプリ  ver.1.6
+   学級編制アプリ  ver.1.7
    ・データは JSON ファイルで保存（ブラウザ内には保存しない）
    ・判定ルール（聞き取りシートの判定欄は v1.6 でなくした。判定はアプリだけで行う）
      配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
@@ -219,7 +219,7 @@ table.pt td.c,table.pt th.c{text-align:center}
    ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
    ===================================================================== */
 
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.7';
 const APP_UPDATED = '2026-11-18';
 const MARKS = ['', 'なし', '○', '◎'];
 const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
@@ -242,7 +242,7 @@ const B_ITEMS = [
   {k:'health', l:'健康面', s:'健康',         h:'持病・服薬・アレルギー・発作・体力'},
 ];
 const C_ITEMS = [
-  {k:'leader',  l:'リーダー性', s:'リーダー',     h:'自分から声をかける／まわりを引っ張る'},
+  {k:'leader',  l:'リーダー性', s:'リーダー',     h:'自分から声をかける／まわりを引っ張る', only:['','なし','◎'], tip:'あり'},  // v1.7：○は使わない（あり＝◎のみ）
   {k:'trouble', l:'トラブルの傾向', s:'トラブル', h:'手が出る／言葉が強い／集団に入れない'},
 ];
 const E_ITEMS = [
@@ -273,7 +273,7 @@ function defaultSettings(){
       {k:'parSum', l:'保護者対応レベル 合計',    w:5.6, t:2},
       {k:'par3',   l:'　うち保護者対応レベル3',  w:4,   t:1},
       {k:'early',  l:'早生まれ（1/1〜4/1生）',   w:2,   t:2},
-      {k:'leader', l:'リーダー性あり（○・◎）',   w:3,   t:2},
+      {k:'leader', l:'リーダー性あり（◎）',      w:3,   t:2},
     ],
     wArea:1, wEn:1, wFriend:20,
     dismissal:[
@@ -496,7 +496,7 @@ const IMPORT_MAP = {
   resp:{'声かけで戻れる':'なし','手を添える等が必要':'○','声かけでは変化なし':'◎','支援を拒む・抵抗する':'◎'},
   // 生活面：項目ごとの選択肢（B_ITEMS の o）に加え、旧様式の「よくある／ときどき／―」も読める
   B:{'よくある':'◎','ときどき':'○','―':'なし','-':'なし','－':'なし','なし':'なし'},
-  leader:{'はい':'○','いいえ':'なし'},
+  leader:{'はい':'◎','あり':'◎','○':'◎','いいえ':'なし'},   // v1.7：リーダー性は あり＝◎ のみ
   trouble:{'よくある':'◎','ときどきある':'○','なし':'なし'},
   e_contact:{'非常に多い':'◎','多い':'○','普通':'なし','少ない':'なし'},
   e_comm:{'難しい':'◎','ときどき難しい':'○','伝わりやすい':'なし'},
@@ -654,7 +654,7 @@ const HS_SECS = [
   {t:'Ａ　行動・発達', mh:'要支援＝◎\n見守り＝○', items:A_ITEMS.map(x=>({k:x.k, l:x.l, h:x.h, kind:'mark'}))},
   {t:'Ｂ　生活面', mh:'要支援＝◎\n見守り＝○', items:B_ITEMS.map(x=>({k:x.k, l:x.l, h:x.h, kind:'mark'}))},
   {t:'Ｃ　人間関係　※学級編制で最も参考にする項目です。必ず「なし」まで確認してください', mh:'要支援＝◎\n見守り＝○', items:[
-    ...C_ITEMS.map(x=>({k:x.k, l:x.l, h:x.h, kind:'mark'})),
+    ...C_ITEMS.map(x=>({k:x.k, l:x.l, h:x.k==='leader'?x.h+'\n（あり＝◎）':x.h, kind:'mark', only:x.only})),
     {k:'friends', l:'仲の良い子', h:'同じ小学校へ進む子同士の組み合わせ', kind:'pair'},
     {k:'apart',   l:'離したほうがよい子', h:'組み合わせと、その理由', kind:'pair'}]},
   {t:'Ｄ　総合', items:[
@@ -772,7 +772,7 @@ function hsDocumentXml(en){
   // keep：同じ項目の行がページの境目で分かれないように、次の行と同じページに置く
   const label = (it,keep)=>wp(wr(it.l,{b:true,sz:18}),{keep})+wp(wr(it.h,{sz:15,color:'595959'}),{keep});
   const nameP = keep=>wp(wcombo('hs-name','児童名',names),{keep});
-  const markP = keep=>wp(wcombo('hs-mark','◎○',marks),{jc:'center', keep});
+  const markP = (keep,it)=>wp(wcombo('hs-mark','◎○', it&&it.only ? [{d:'◎', v:'dbl'}] : marks),{jc:'center', keep});
   for(const sec of HS_SECS){
     // 表の見出し（kind ごと）：mark＝◎○の列あり／pair＝相手の児童名の列あり／plain＝児童名と内容だけ
     const hd=(t,w,o)=>wtc(w, wp(wr(t,{b:true,sz:(o&&o.sz)||17}),{jc:'center'}), Object.assign({fill:'D9D9D9'}, o||{}));
@@ -794,7 +794,7 @@ function hsDocumentXml(en){
         const first = wtc(grid[0], r===0?label(it,k):wp('',{keep:k}), {vm:r===0?'restart':'cont', fill:'F2F2F2', va:'top'});
         let cells;
         if(kind==='pair') cells=[first, wtc(GP[1], nameP(k)), wtc(GP[2], nameP(k)), wtc(GP[3], wp('',{keep:k}))];
-        else if(kind==='mark') cells=[first, wtc(G[1], nameP(k)), wtc(G[2], markP(k)), wtc(G[3], wp('',{keep:k}))];
+        else if(kind==='mark') cells=[first, wtc(G[1], nameP(k)), wtc(G[2], markP(k,it)), wtc(G[3], wp('',{keep:k}))];
         else cells=[first, wtc(G[1], nameP(k)), wtc(G[2]+G[3], wp('',{keep:k}), {span:2})];
         rows.push(wtr(cells, {h:380}));
       }
@@ -942,6 +942,7 @@ function planHearing(parsed, en){
     for(let t of toks){
       if(hsNone(t)) continue;
       let mk=mk0;
+      if(it.only) mk='◎';   // リーダー性：名前が挙がった児童は あり＝◎（○と書かれていても◎）
       const m=t.match(/^(.+?)[\s　]*[（(]?([◎○〇◯])[）)]?$/); if(m){ t=m[1]; if(!mk) mk=hsMark(m[2]); }
       const s=hsResolve(t, nameCell, pool);
       if(!s){ P.unmatched.push({l:it.l, name:t}); continue; }
@@ -1307,9 +1308,12 @@ function renderData(v){
 }
 
 /* ---------- 編集ダイアログ ---------- */
+/* 項目ごとに選べる印（リーダー性は 未・なし・◎ だけ） */
+function marksOf(k){ const it=C_ITEMS.find(x=>x.k===k); return it&&it.only ? it.only : MARKS; }
 function segHtml(key, val, opts){
-  const tip=m=>opts&&m?` title="${esc(opts[MARKS.indexOf(m)-1])}"`:'';
-  return `<span class="seg" data-seg="${key}">${MARKS.map(m=>`<button type="button" data-v="${m}" class="${val===m?'on':''} m-${MARK_CLASS[m]}"${tip(m)}>${m||'未'}</button>`).join('')}</span>`
+  const it=C_ITEMS.find(x=>x.k===key);
+  const tip=m=>it&&it.tip&&m==='◎' ? ` title="${esc(it.tip)}"` : opts&&m?` title="${esc(opts[MARKS.indexOf(m)-1])}"`:'';
+  return `<span class="seg" data-seg="${key}">${marksOf(key).map(m=>`<button type="button" data-v="${m}" class="${val===m?'on':''} m-${MARK_CLASS[m]}"${tip(m)}>${m||'未'}</button>`).join('')}</span>`
     + (opts?`<div class="muted" style="font-size:11px;line-height:1.4;margin-top:2px">○ ${esc(opts[1])}<br>◎ ${esc(opts[2])}</div>`:'');
 }
 function itemRow(s, it, judgeLabel){
@@ -1445,7 +1449,7 @@ function renderMatrix(v){
         <td class="c">${lvBadge(s)}</td><td class="c">${parBadge(s)}</td></tr>`).join('')}</tbody>
     </table></div></div>`;
   $('#mxEn').onchange=e=>{mxEn=e.target.value;render();};
-  const cyc=(td,dir)=>{ const [id,k]=td.dataset.mx.split('|'); const s=byId(id); const i=MARKS.indexOf(s.marks[k]); s.marks[k]=MARKS[(i+dir+4)%4]; markDirty();
+  const cyc=(td,dir)=>{ const [id,k]=td.dataset.mx.split('|'); const s=byId(id); const L=marksOf(k); const i=Math.max(0,L.indexOf(s.marks[k])); s.marks[k]=L[(i+dir+L.length)%L.length]; markDirty();
     const m=s.marks[k]; td.className='mk v-'+MARK_CLASS[m]; td.textContent=m==='なし'?'－':m||'·';
     const tr=td.parentElement; tr.children[tr.children.length-2].innerHTML=lvBadge(s); tr.children[tr.children.length-1].innerHTML=parBadge(s); };
   v.querySelector('table.mx').addEventListener('click',e=>{const td=e.target.closest('td[data-mx]'); if(td) cyc(td,1);});
@@ -1747,6 +1751,7 @@ function renderHelp(v){
   <table class="grid" style="max-width:820px">
     <tr><th>行動・発達</th><td>要支援→◎、見守り→○、「―」→なし（支援への反応：変化なし・拒む→◎、手を添える等→○、声かけで戻れる→なし）</td></tr>
     <tr><th>生活面</th><td>${B_ITEMS.filter(it=>it.o).map(it=>`${esc(it.l)}：${esc(it.o[2])}→◎、${esc(it.o[1])}→○、${esc(it.o[0])}→なし`).join('<br>')}<br><span class="muted">旧様式の「よくある→◎、ときどき→○、―→なし」も読み込めます。</span></td></tr>
+    <tr><th>リーダー性</th><td>はい・あり→◎、いいえ→なし（リーダー性は「あり＝◎」だけで、○は使いません）</td></tr>
     <tr><th>家庭・保護者</th><td>非常に多い／難しい／不備が多い／大きな差→◎、多い／ときどき難しい／ときどき不備／やや差→○</td></tr>
     <tr><th>確定レベル</th><td>シートの「配慮レベル（確定）」「保護者対応レベル（確定）」が新しい自動判定と違う場合は、確定値として引き継ぎます。</td></tr>
     <tr><th>取り込み方</th><td>児童データがあるときは、取り込む前に選びます。<br><b>IDで照らし合わせる</b>：同じIDの児童は、Excelで入力されているセルだけ書き換えます（空欄はアプリの内容を残す）。入・出、就学時健診の受診先、組、固定は残ります。Excelにない児童は残し、新しいIDは追加します。IDが同じで氏名が違う児童がいるときは、取り込む前に確認が出ます。<br><b>入れ替える</b>：今の児童データをすべて消して、Excelの児童だけにします。</td></tr>
@@ -1787,6 +1792,7 @@ function loadJson(text, name){
       s.marks=Object.assign(blankStudent(0).marks, x.marks||{}); s.notes=x.notes||{}; s.unmatched=x.unmatched||{friends:[],apart:[]};
       s.friends=(x.friends||[]).map(String); s.apart=(x.apart||[]).map(String);
       if(!['','入','出'].includes(s.move)) s.move='';
+      if(s.marks.leader==='○') s.marks.leader='◎';   // v1.7：リーダー性は あり＝◎ のみ
       s.kenshinOther=!!s.kenshinOther; s.kenshinPlace=String(s.kenshinPlace||''); return s; }), log:d.log||[]};
   fileName=name; dirty=false; selId=null;
 }
