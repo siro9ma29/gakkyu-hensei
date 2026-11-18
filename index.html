@@ -209,7 +209,7 @@ table.pt td.c,table.pt th.c{text-align:center}
 <script>
 'use strict';
 /* =====================================================================
-   学級編制アプリ  ver.1.7
+   学級編制アプリ  ver.1.8
    ・データは JSON ファイルで保存（ブラウザ内には保存しない）
    ・判定ルール（聞き取りシートの判定欄は v1.6 でなくした。判定はアプリだけで行う）
      配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
@@ -219,7 +219,7 @@ table.pt td.c,table.pt th.c{text-align:center}
    ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
    ===================================================================== */
 
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 const APP_UPDATED = '2026-11-18';
 const MARKS = ['', 'なし', '○', '◎'];
 const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
@@ -822,7 +822,7 @@ function crc32(u8){
 function zipStore(files, type){
   const enc=new TextEncoder(), parts=[], central=[]; let off=0;
   for(const f of files){
-    const nm=enc.encode(f.name), d=enc.encode(f.data), crc=crc32(d);
+    const nm=enc.encode(f.name), d=(f.data instanceof Uint8Array)?f.data:enc.encode(f.data), crc=crc32(d);  // 文字列はUTF-8に、Uint8Array（Wordファイルなど）はそのまま入れる
     const h=new DataView(new ArrayBuffer(30));
     h.setUint32(0,0x04034b50,true); h.setUint16(4,20,true); h.setUint16(6,0x0800,true); h.setUint16(12,0x21,true);
     h.setUint32(14,crc,true); h.setUint32(18,d.length,true); h.setUint32(22,d.length,true); h.setUint16(26,nm.length,true);
@@ -851,11 +851,27 @@ function hsDocxBlob(en){
     {name:'word/document.xml', data:hsDocumentXml(en)},
   ], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
 }
-function downloadHearing(en){
-  const a=document.createElement('a'); a.href=URL.createObjectURL(hsDocxBlob(en));
-  a.download=`聞き取りシート_${en||'空のシート'}.docx`; document.body.appendChild(a); a.click();
+/* ファイル名に使えない文字を「＿」にする */
+function hsFileName(en){ return `聞き取りシート_${String(en||'空のシート').replace(/[\\/:*?"<>|]/g,'＿')}.docx`; }
+function saveBlob(blob, name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
+}
+function downloadHearing(en){
+  saveBlob(hsDocxBlob(en), hsFileName(en));
   toast('聞き取りシートを出力しました'+(en?'：'+en:''));
+}
+/* すべての園の聞き取りシートを、1つのZIPにまとめて出力する（v1.8）
+   ・中身は園ごとの .docx（1園1ファイル。読み込みは今までどおり1ファイルずつ）
+   ・ZIPにまとめるのは、ブラウザが続けてのダウンロードを止めることがあるため */
+async function downloadHearingAll(){
+  const ens=enList(); if(!ens.length){ toast('児童データに園がありません'); return; }
+  const files=[];
+  for(const en of ens) files.push({name:hsFileName(en), data:new Uint8Array(await hsDocxBlob(en).arrayBuffer())});
+  const d=new Date(), ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  saveBlob(zipStore(files,'application/zip'), `聞き取りシート_全園_${ymd}.zip`);
+  toast(`聞き取りシートを出力しました：${ens.length}園（ZIP）`);
 }
 
 /* ---------- 読み込み ---------- */
@@ -1012,7 +1028,9 @@ function openHearingDlg(){
     <div class="panel" style="margin:0 0 10px"><b>① 聞き取りシートを出力する</b>
       <p class="muted" style="margin:2px 0 6px">園を選ぶと、その園の名簿（氏名・ふりがな・性別）と、児童名のプルダウンが入ったシートになります。1園につき1枚です。</p>
       <div class="row"><select id="hsEn">${ens.map(e=>`<option ${e===cur?'selected':''}>${esc(e)}</option>`).join('')}<option value="">（名簿なしの空のシート）</option></select>
-        <button type="button" class="primary" data-hs="out">Wordで出力</button></div></div>
+        <button type="button" class="primary" data-hs="out">Wordで出力</button></div>
+      <div class="row" style="margin-top:6px"><button type="button" data-hs="outAll" ${ens.length?'':'disabled'}>すべての園（${ens.length}園）をまとめて出力（ZIP）</button></div>
+      <p class="muted" style="margin:2px 0 0">ZIPの中に、園ごとのWordファイル（聞き取りシート_園名.docx）が入っています。ZIPを開いて（右クリック→「すべて展開」）、園ごとに渡してください。</p></div>
     <div class="panel" style="margin:0"><b>② 記入した聞き取りシートを読み込む</b>
       <p class="muted" style="margin:2px 0 6px">読み込む前に、読み取った内容の確認画面が出ます。アプリの児童データ（名簿）を先に取り込んでおいてください。</p>
       <button type="button" data-hs="in" ${S.students.length?'':'disabled'}>聞き取りシートを読み込む（.docx）</button>
@@ -1021,6 +1039,7 @@ function openHearingDlg(){
   d.onclick=e=>{ const b=e.target.closest('[data-hs]'); if(!b) return;
     if(b.dataset.hs==='close') d.close();
     if(b.dataset.hs==='out') downloadHearing($('#hsEn').value);
+    if(b.dataset.hs==='outAll') downloadHearingAll();
     if(b.dataset.hs==='in'){ d.close(); $('#fileDocx').click(); } };
   d.onchange=null; d.onclose=null;
   d.showModal();
