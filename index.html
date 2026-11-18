@@ -184,11 +184,11 @@ table.pt td.c,table.pt th.c{text-align:center}
   <span class="file" id="fileInfo">データ未読込</span>
   <span class="sp"></span>
   <button id="btnNew">新規</button>
-  <button id="btnTemplate" title="聞き取り内容を入力するための空のExcel">入力用Excel（原版）</button>
   <button id="btnImportXlsx">Excelから取込</button>
-  <button id="btnHearing" title="園ごとの聞き取りシート（Word）の出力と読み込み">聞き取りシート（Word）</button>
-  <button id="btnOpen">データを開く（JSON）</button>
-  <button id="btnSave" class="primary">保存（JSON）</button>
+  <button id="btnHearing" title="記入した聞き取りシート（Word）を読み込む。シートの出力は「④ 出力・印刷」">聞き取りシート取込（Word）</button>
+  <button id="btnOpen" title="保存したデータ（JSON）を開く">開く（JSON）</button>
+  <button id="btnSave" class="primary" title="開いているファイルに上書き保存（Ctrl＋S）。初めての保存では保存場所を選びます">保存（JSON）</button>
+  <button id="btnSaveAs" title="保存場所とファイル名を選んで、新しいファイルとして保存">別名で保存</button>
   <input type="file" id="fileXlsx" accept=".xlsx,.xlsm" hidden>
   <input type="file" id="fileDocx" accept=".docx" hidden>
   <input type="file" id="fileJson" accept=".json,application/json" hidden>
@@ -209,7 +209,7 @@ table.pt td.c,table.pt th.c{text-align:center}
 <script>
 'use strict';
 /* =====================================================================
-   学級編制アプリ  ver.1.8
+   学級編制アプリ  ver.1.9
    ・データは JSON ファイルで保存（ブラウザ内には保存しない）
    ・判定ルール（聞き取りシートの判定欄は v1.6 でなくした。判定はアプリだけで行う）
      配慮レベル  ：A行動・発達(8)＋B生活面(5)＋Cトラブル傾向 の ◎の数
@@ -219,7 +219,7 @@ table.pt td.c,table.pt th.c{text-align:center}
    ・「離したほうがよい子」は絶対条件、「仲の良い子」はできれば同じ学級
    ===================================================================== */
 
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 const APP_UPDATED = '2026-11-18';
 const MARKS = ['', 'なし', '○', '◎'];
 const MARK_CLASS = {'':'blank','なし':'none','○':'sgl','◎':'dbl'};
@@ -290,6 +290,7 @@ function defaultSettings(){
 /* ---------------- state ---------------- */
 let S = {settings: defaultSettings(), students: [], log: []};
 let fileName = '';
+let fileHandle = null;   // v1.9：開いた／保存したJSONファイル（上書き保存に使う。Chrome・Edge のみ）
 let dirty = false;
 let tab = 'data';
 let selId = null;          // 編制ボードで選択中
@@ -313,7 +314,7 @@ function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('sh
 function markDirty(){ dirty=true; updateFileInfo(); }
 function updateFileInfo(){
   const n=S.students.length;
-  $('#fileInfo').innerHTML = (fileName?esc(fileName):'（未保存の新しいデータ）') + `　／　${n}名` + (dirty?'　<span class="dirty">● 未保存の変更あり</span>':'');
+  $('#fileInfo').innerHTML = (fileName?esc(fileName)+(fileHandle?'':'<span class="muted">（保存すると新しいファイル）</span>'):'（未保存の新しいデータ）') + `　／　${n}名` + (dirty?'　<span class="dirty">● 未保存の変更あり</span>':'');
 }
 function byId(id){ return S.students.find(s=>s.id===String(id)); }
 function normDigits(s){ return String(s??'').replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)); }
@@ -853,25 +854,53 @@ function hsDocxBlob(en){
 }
 /* ファイル名に使えない文字を「＿」にする */
 function hsFileName(en){ return `聞き取りシート_${String(en||'空のシート').replace(/[\\/:*?"<>|]/g,'＿')}.docx`; }
-function saveBlob(blob, name){
+/* ---------- ファイルの保存（v1.9） ----------
+   Chrome・Edge では「保存先を選ぶ画面」を出して、選んだ場所に保存する（showSaveFilePicker）。
+   使えないブラウザ・画面を開けないとき（埋め込み表示など）は、今までどおりダウンロードフォルダに保存する。
+   id ごとに、前回選んだフォルダをブラウザが覚えている（データ＝gakkyu-data、出力＝gakkyu-out）。 */
+const FT = {
+  json:{description:'学級編制データ（JSON）', accept:{'application/json':['.json']}},
+  docx:{description:'Word 文書', accept:{'application/vnd.openxmlformats-officedocument.wordprocessingml.document':['.docx']}},
+  zip :{description:'ZIP ファイル', accept:{'application/zip':['.zip']}},
+  xlsx:{description:'Excel ブック', accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}},
+};
+function downloadBlob(blob, name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=name; document.body.appendChild(a); a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
 }
-function downloadHearing(en){
-  saveBlob(hsDocxBlob(en), hsFileName(en));
-  toast('聞き取りシートを出力しました'+(en?'：'+en:''));
+async function writeHandle(h, blob){ const w=await h.createWritable(); await w.write(blob); await w.close(); }
+/* 保存先を選んで保存する。戻り値：{handle, name}（選んだファイル）／{name}（ダウンロード）／null（やめた）
+   makeBlob は Blob か、Blob を返す関数（async 可）。保存先の画面は、クリックの直後に開く必要があるため先に出す */
+async function saveFile(makeBlob, name, type, id){
+  let h=null;
+  if(window.showSaveFilePicker){
+    try{ h=await window.showSaveFilePicker({suggestedName:name, id:id||'gakkyu-out', types:[FT[type]]}); }
+    catch(err){ if(err.name==='AbortError') return null; h=null; }   // やめた／使えない → ダウンロードへ
+  }
+  const blob = typeof makeBlob==='function' ? await makeBlob() : makeBlob;
+  if(h){
+    try{ await writeHandle(h, blob); return {handle:h, name:h.name}; }
+    catch(err){ alert('選んだ場所に保存できませんでした。ダウンロードフォルダに保存します。\n'+err.message); }
+  }
+  downloadBlob(blob, name); return {name};
+}
+async function downloadHearing(en){
+  const r=await saveFile(()=>hsDocxBlob(en), hsFileName(en), 'docx'); if(!r) return;
+  toast('聞き取りシートを出力しました：'+r.name);
 }
 /* すべての園の聞き取りシートを、1つのZIPにまとめて出力する（v1.8）
    ・中身は園ごとの .docx（1園1ファイル。読み込みは今までどおり1ファイルずつ）
    ・ZIPにまとめるのは、ブラウザが続けてのダウンロードを止めることがあるため */
 async function downloadHearingAll(){
   const ens=enList(); if(!ens.length){ toast('児童データに園がありません'); return; }
-  const files=[];
-  for(const en of ens) files.push({name:hsFileName(en), data:new Uint8Array(await hsDocxBlob(en).arrayBuffer())});
   const d=new Date(), ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
-  saveBlob(zipStore(files,'application/zip'), `聞き取りシート_全園_${ymd}.zip`);
-  toast(`聞き取りシートを出力しました：${ens.length}園（ZIP）`);
+  const r=await saveFile(async()=>{
+    const files=[];
+    for(const en of ens) files.push({name:hsFileName(en), data:new Uint8Array(await hsDocxBlob(en).arrayBuffer())});
+    return zipStore(files,'application/zip');
+  }, `聞き取りシート_全園_${ymd}.zip`, 'zip'); if(!r) return;
+  toast(`聞き取りシートを出力しました：${ens.length}園（${r.name}）`);
 }
 
 /* ---------- 読み込み ---------- */
@@ -1020,30 +1049,7 @@ function applyHearing(P){
 }
 
 /* ---------- 画面 ---------- */
-function openHearingDlg(){
-  const d=$('#dlg'); const ens=enList();
-  const cur = (tab==='matrix' && mxEn && mxEn!=='*') ? mxEn : (ens[0]||'');
-  d.innerHTML=`<div class="dlg-head"><h3>聞き取りシート（Word）</h3><button type="button" data-hs="close">閉じる</button></div>
-  <div class="dlg-body" style="max-width:680px;line-height:1.8">
-    <div class="panel" style="margin:0 0 10px"><b>① 聞き取りシートを出力する</b>
-      <p class="muted" style="margin:2px 0 6px">園を選ぶと、その園の名簿（氏名・ふりがな・性別）と、児童名のプルダウンが入ったシートになります。1園につき1枚です。</p>
-      <div class="row"><select id="hsEn">${ens.map(e=>`<option ${e===cur?'selected':''}>${esc(e)}</option>`).join('')}<option value="">（名簿なしの空のシート）</option></select>
-        <button type="button" class="primary" data-hs="out">Wordで出力</button></div>
-      <div class="row" style="margin-top:6px"><button type="button" data-hs="outAll" ${ens.length?'':'disabled'}>すべての園（${ens.length}園）をまとめて出力（ZIP）</button></div>
-      <p class="muted" style="margin:2px 0 0">ZIPの中に、園ごとのWordファイル（聞き取りシート_園名.docx）が入っています。ZIPを開いて（右クリック→「すべて展開」）、園ごとに渡してください。</p></div>
-    <div class="panel" style="margin:0"><b>② 記入した聞き取りシートを読み込む</b>
-      <p class="muted" style="margin:2px 0 6px">読み込む前に、読み取った内容の確認画面が出ます。アプリの児童データ（名簿）を先に取り込んでおいてください。</p>
-      <button type="button" data-hs="in" ${S.students.length?'':'disabled'}>聞き取りシートを読み込む（.docx）</button>
-      ${S.students.length?'':'<span class="muted" style="color:var(--warn)">児童データがないため読み込めません</span>'}</div>
-  </div>`;
-  d.onclick=e=>{ const b=e.target.closest('[data-hs]'); if(!b) return;
-    if(b.dataset.hs==='close') d.close();
-    if(b.dataset.hs==='out') downloadHearing($('#hsEn').value);
-    if(b.dataset.hs==='outAll') downloadHearingAll();
-    if(b.dataset.hs==='in'){ d.close(); $('#fileDocx').click(); } };
-  d.onchange=null; d.onclose=null;
-  d.showModal();
-}
+/* v1.9：出力は「④ 出力・印刷」（renderPrint）、読み込みは右上のボタンと「② 園別一括入力」に移した */
 /* 確認画面：読み取った内容を見せて、「取り込む」でアプリに入れる */
 function showHearingPreview(parsed){
   const ens=enList();
@@ -1679,8 +1685,17 @@ function renderPrint(v){
   const K=Number(S.settings.classCount);
   const scopeOpts=`<option value="all">全員</option>${Array.from({length:K},(_,i)=>`<option value="${i+1}">${i+1}組</option>`).join('')}<option value="un">未配置</option><option value="sp">特別支援学級等</option>`;
   const pages=S.students.length?buildPrint():[];
-  v.innerHTML=`<div class="panel row" style="justify-content:space-between">
-    <div class="row">
+  const ens=enList(); if(printOpt.hsEn===undefined || (printOpt.hsEn && !ens.includes(printOpt.hsEn))) printOpt.hsEn=ens[0]||'';
+  v.innerHTML=`<div class="panel"><b>聞き取りシート（Word）を出力する</b>
+    <span class="muted">　園を選ぶと、その園の名簿（氏名・ふりがな・性別）と児童名のプルダウンが入ったシートになります（1園につき1枚）。記入したシートは右上の「聞き取りシート取込（Word）」で読み込みます。</span>
+    <div class="row" style="margin-top:6px"><select id="hsEn">${ens.map(e=>`<option ${e===printOpt.hsEn?'selected':''}>${esc(e)}</option>`).join('')}<option value="" ${printOpt.hsEn===''?'selected':''}>（名簿なしの空のシート）</option></select>
+      <button data-act="hsOutPrint">この園を出力（Word）</button>
+      <button data-act="hsOutAll" ${ens.length?'':'disabled'}>すべての園（${ens.length}園）をまとめて出力（ZIP）</button></div>
+    <p class="muted" style="margin:4px 0 0">ZIPの中に、園ごとのWordファイル（聞き取りシート_園名.docx）が入っています。ZIPを開いて（右クリック→「すべて展開」）、園ごとに渡してください。</p></div>
+  <div class="panel row"><b>入力用Excel（原版）を出力する</b><button data-act="template">入力用Excel（原版）</button>
+    <span class="muted">聞き取り内容を1人1行で入力するための空のExcelです。入力したら右上の「Excelから取込」で読み込みます。</span></div>
+  <div class="panel row" style="justify-content:space-between">
+    <div class="row"><b>印刷する</b>
       <select id="pKind">
         <option value="roster">クラス名簿</option><option value="dismissal">下校グループ名簿</option><option value="karte">個人カルテ（1人1枚）</option>
         <option value="tanpyo">単票（1枚に3人）</option><option value="summary">編制結果サマリ</option></select>
@@ -1692,6 +1707,7 @@ function renderPrint(v){
   <p class="muted">配慮レベルや家庭の情報を含む帳票です。印刷物の取り扱いに注意してください。PDFにしたい場合は、印刷画面でプリンターに「PDFに保存」を選びます。</p>
   <div class="preview">${pages.map(p=>`<div class="page">${p}</div>`).join('')||'<div class="page">表示する内容がありません</div>'}</div>`;
   $('#pKind').value=printOpt.kind; $('#pScope').value=printOpt.scope;
+  $('#hsEn').onchange=e=>{printOpt.hsEn=e.target.value;};
   $('#pKind').onchange=e=>{printOpt.kind=e.target.value; render();};
   $('#pScope').onchange=e=>{printOpt.scope=e.target.value; render();};
   if($('#pLv')) $('#pLv').onchange=e=>{printOpt.showLv=e.target.checked; render();};
@@ -1751,13 +1767,13 @@ function renderHelp(v){
   v.innerHTML=`<div class="panel" style="max-width:900px;line-height:1.8">
   <h2>使い方</h2>
   <ol>
-    <li><b>データを用意する</b>：右上の「入力用Excel（原版）」で空のExcelを出力し、聞き取り内容を1人1行で入力して「Excelから取込」で読み込みます。①児童データの「＋児童を追加」から直接入力することもできます。</li>
+    <li><b>データを用意する</b>：「④ 出力・印刷」の「入力用Excel（原版）」で空のExcelを出力し、聞き取り内容を1人1行で入力して「Excelから取込」で読み込みます。①児童データの「＋児童を追加」から直接入力することもできます。</li>
     <li><b>聞き取り内容を入力する</b>：聞き取りシート1枚（1園）分は「② 園別一括入力」で、マスをクリックして ◎／○／なし を入れるのが速いです。具体的な様子や「仲の良い子」「離したほうがよい子」は、氏名をクリックして詳細画面で入力します（相手は名簿から選びます）。</li>
-    <li><b>聞き取りシート（Word）を使う</b>：右上の「聞き取りシート（Word）」で園を選んで出力すると、その園の名簿と、児童名・◎○のプルダウンが入ったシートになります（1園につき1枚、1行に1人）。記入したシートを同じ画面から読み込むと、確認画面のあとで児童データに入ります。名前が出た児童はシートの◎○と内容で書き換え（シートで空欄のところはアプリの内容を残す）、記入があった項目で名前が出なかったその園の児童は、未記入なら「なし」にします。記入がない項目（聞き忘れ）は変えません。</li>
+    <li><b>聞き取りシート（Word）を使う</b>：「④ 出力・印刷」で園を選んで出力すると（「すべての園をまとめて出力（ZIP）」もあります）、その園の名簿と、児童名・◎○のプルダウンが入ったシートになります（1園につき1枚、1行に1人）。記入したシートを右上の「聞き取りシート取込（Word）」（または②園別一括入力）で読み込むと、確認画面のあとで児童データに入ります。名前が出た児童はシートの◎○と内容で書き換え（シートで空欄のところはアプリの内容を残す）、記入があった項目で名前が出なかったその園の児童は、未記入なら「なし」にします。記入がない項目（聞き忘れ）は変えません。</li>
     <li><b>レベルを確認する</b>：配慮レベル・保護者対応レベルは自動で判定されます。実態と合わないときは、詳細画面の「確定」で上書きします。</li>
     <li><b>編制する</b>：「③ 編制・調整」で「自動編制（最初から）」を押します。結果はドラッグで手直しでき、バランス表がその場で更新されます。動かしたくない児童は🔓で固定してから「今の配置を改善」を押すと、残りの児童だけで調整し直します。</li>
     <li><b>印刷する</b>：「④ 出力・印刷」でクラス名簿・下校グループ・個人カルテ・単票・サマリを印刷できます。</li>
-    <li><b>保存する</b>：右上の「保存（JSON）」でファイルに保存します。<u>このアプリはブラウザ内にデータを残しません</u>。作業の区切りごとに必ず保存し、次回は「データを開く」で続きから作業してください。</li>
+    <li><b>保存する</b>：右上の「保存（JSON）」でファイルに保存します（Ctrl＋S でも保存できます）。Chrome・Edge では、初めての保存で保存場所とファイル名を選べ、2回目からは同じファイルに上書きします。別の場所・名前にしたいときは「別名で保存」を使います。<u>このアプリはブラウザ内にデータを残しません</u>。作業の区切りごとに必ず保存し、次回は「開く（JSON）」で続きから作業してください。</li>
   </ol>
   <h2>判定ルール</h2>
   <table class="grid" style="max-width:820px">
@@ -1782,14 +1798,37 @@ function renderHelp(v){
 /* =====================================================================
    ファイル入出力・イベント
    ===================================================================== */
-function saveJson(){
+/* 保存（v1.9）
+   ・開いた／保存したファイルがあれば、そのファイルに上書き（Chrome・Edge）
+   ・初めての保存と「名前を付けて保存」では、保存場所とファイル名を選ぶ
+   ・選ぶ画面が使えないブラウザでは、今までどおりダウンロードフォルダに日時付きの名前で保存 */
+function jsonBlob(){
+  const data={app:'学級編制アプリ', version:APP_VERSION, savedAt:new Date().toISOString(), settings:S.settings, students:S.students, log:S.log};
+  return new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+}
+async function saveJson(asNew){
+  if(fileHandle && !asNew){
+    try{
+      if(fileHandle.requestPermission && await fileHandle.requestPermission({mode:'readwrite'})!=='granted') throw new Error('書き込みが許可されませんでした');
+      await writeHandle(fileHandle, jsonBlob());
+      fileName=fileHandle.name; dirty=false; updateFileInfo(); toast('上書き保存しました：'+fileName); return;
+    }catch(err){ if(!confirm('開いているファイルに上書きできませんでした。\n'+err.message+'\n\n保存場所を選んで保存しますか？')) return; }
+  }
   const d=new Date(), p=n=>String(n).padStart(2,'0');
-  const name=`学級編制データ_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json`;
-  const data={app:'学級編制アプリ', version:APP_VERSION, savedAt:d.toISOString(), settings:S.settings, students:S.students, log:S.log};
-  const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
-  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
-  fileName=name; dirty=false; updateFileInfo(); toast('保存しました：'+name);
+  const name = (asNew||!fileName) ? `学級編制データ_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.json` : fileName;
+  const r=await saveFile(jsonBlob(), name, 'json', 'gakkyu-data'); if(!r) return;
+  fileHandle=r.handle||null; fileName=r.name; dirty=false; updateFileInfo();
+  toast((r.handle?'保存しました：':'ダウンロードフォルダに保存しました：')+r.name);
+}
+/* 開く（v1.9）：選んだファイルを覚えておき、「保存」で同じファイルに上書きできるようにする */
+async function openJsonFile(){
+  if(!confirmDiscard()) return;
+  if(!window.showOpenFilePicker){ $('#fileJson').click(); return; }
+  let h;
+  try{ [h]=await window.showOpenFilePicker({id:'gakkyu-data', types:[FT.json]}); }
+  catch(err){ if(err.name!=='AbortError') $('#fileJson').click(); return; }
+  try{ const f=await h.getFile(); loadJson(await f.text(), f.name); fileHandle=h; tab='data'; render(); toast('読み込みました：'+f.name); }
+  catch(err){ alert('読み込みに失敗しました：\n'+err.message); }
 }
 function downloadTemplate(){
   const el=document.getElementById('tplXlsx');
@@ -1797,9 +1836,7 @@ function downloadTemplate(){
   const bin=atob(el.textContent.trim()); const u8=new Uint8Array(bin.length);
   for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
   const blob=new Blob([u8],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='引継ぎシート_原版.xlsx';
-  document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1000);
-  toast('入力用Excel（原版）を出力しました');
+  saveFile(blob, '引継ぎシート_原版.xlsx', 'xlsx').then(r=>{ if(r) toast('入力用Excel（原版）を出力しました：'+r.name); });
 }
 function loadJson(text, name){
   const d=JSON.parse(text);
@@ -1835,8 +1872,9 @@ document.addEventListener('click',e=>{
   if(act==='template') downloadTemplate();
   if(act==='hsOut') downloadHearing(mxEn==='*'?'':mxEn);
   if(act==='hsIn') $('#fileDocx').click();
-  if(act==='hsDlg') openHearingDlg();
-  if(act==='openJson') $('#fileJson').click();
+  if(act==='hsOutPrint') downloadHearing($('#hsEn').value);
+  if(act==='hsOutAll') downloadHearingAll();
+  if(act==='openJson') openJsonFile();
   if(act==='add'){ const s=blankStudent(nextId()); if(dataFilter.en) s.en=dataFilter.en; S.students.push(s); markDirty(); openEditor(s.id,true); }
   if(act==='fillNone'){
     let list=S.students; if(dataFilter.en) list=list.filter(s=>s.en===dataFilter.en);
@@ -1864,7 +1902,6 @@ document.addEventListener('click',e=>{
   const d=e.target.closest('[data-dis-del]'); if(d){ S.settings.dismissal.splice(Number(d.dataset.disDel),1); markDirty(); render(); }
   const u=e.target.closest('[data-dis-up]'); if(u){ const i=Number(u.dataset.disUp); const a=S.settings.dismissal; [a[i-1],a[i]]=[a[i],a[i-1]]; markDirty(); render(); }
 });
-$('#btnTemplate').onclick=downloadTemplate;
 /* Excelから取込：児童データがあるときは、取り込み方を選んでもらう */
 let importMode='replace';
 function startImport(){
@@ -1897,7 +1934,7 @@ function startImport(){
   d.showModal();
 }
 $('#btnImportXlsx').onclick=startImport;
-$('#btnHearing').onclick=openHearingDlg;
+$('#btnHearing').onclick=()=>{ if(!S.students.length){ alert('児童データがありません。先にExcel（引継ぎシート）などで名簿を取り込んでください。'); return; } $('#fileDocx').click(); };
 /* 聞き取りシート（Word）を読み込む → 確認画面 */
 $('#fileDocx').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
@@ -1905,9 +1942,12 @@ $('#fileDocx').onchange=async e=>{
   try{ showHearingPreview(await parseHearingDocx(f)); }
   catch(err){ alert('聞き取りシートを読み込めませんでした：\n'+err.message); }
 };
-$('#btnOpen').onclick=()=>{ if(confirmDiscard()) $('#fileJson').click(); };
-$('#btnSave').onclick=()=>{ if(!S.students.length && !confirm('児童データが空です。保存しますか？')) return; saveJson(); };
-$('#btnNew').onclick=()=>{ if(!confirmDiscard()) return; S={settings:defaultSettings(), students:[], log:[]}; fileName=''; dirty=false; selId=null; tab='data'; render(); };
+$('#btnOpen').onclick=openJsonFile;
+$('#btnSave').onclick=()=>{ if(!S.students.length && !confirm('児童データが空です。保存しますか？')) return; saveJson(false); };
+$('#btnSaveAs').onclick=()=>{ if(!S.students.length && !confirm('児童データが空です。保存しますか？')) return; saveJson(true); };
+/* Ctrl＋S（Mac は ⌘＋S）で保存 */
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey) && !e.shiftKey && e.key.toLowerCase()==='s'){ e.preventDefault(); $('#btnSave').click(); } });
+$('#btnNew').onclick=()=>{ if(!confirmDiscard()) return; S={settings:defaultSettings(), students:[], log:[]}; fileName=''; fileHandle=null; dirty=false; selId=null; tab='data'; render(); };
 $('#fileXlsx').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
   try{
@@ -1919,13 +1959,13 @@ $('#fileXlsx').onchange=async e=>{
       alert(`IDで照らし合わせて取り込みました（シート「${r.sheet}」）\n\n・Excelの児童 ${r.n}名：情報を更新 ${r.updated}名／新しく追加 ${r.added}名\n・Excelになく、そのまま残した児童 ${r.kept}名\n・配慮レベルの確定値を反映した児童 ${r.lvOv}名\n・保護者対応レベルの確定値を反映した児童 ${r.parOv}名\n・照合できなかった名前 ${r.unmatched}件（新しく見つかった分）` + (r.dobNg.length?`\n・生年月日を読み取れなかった児童 ${r.dobNg.length}名`:'') + `\n\n取り込んだ内容は、まだファイルに保存されていません。右上の「保存（JSON）」で保存してください。`);
       return;
     }
-    const r=importReplace(p, f.name); fileName=''; dirty=true; tab='data'; selId=null; render();
+    const r=importReplace(p, f.name); fileName=''; fileHandle=null; dirty=true; tab='data'; selId=null; render();
     alert(`取り込みが完了しました（シート「${r.sheet}」）\n\n・児童 ${r.n}名（うち特別支援学級・対象外 ${r.special}名）\n・配慮レベルの確定値を引き継いだ児童 ${r.lvOv}名\n・保護者対応レベルの確定値を引き継いだ児童 ${r.parOv}名\n・照合できなかった名前 ${r.unmatched}件` + (r.dobNg.length?`\n・生年月日を読み取れなかった児童 ${r.dobNg.length}名`:'') + `\n\n取り込んだ内容は、まだファイルに保存されていません。右上の「保存（JSON）」で保存してください。`);
   }catch(err){ alert('取り込みに失敗しました：\n'+err.message); }
 };
 $('#fileJson').onchange=async e=>{
   const f=e.target.files[0]; e.target.value=''; if(!f) return;
-  try{ loadJson(await f.text(), f.name); tab='data'; render(); toast('読み込みました：'+f.name); }
+  try{ loadJson(await f.text(), f.name); fileHandle=null; tab='data'; render(); toast('読み込みました：'+f.name); }
   catch(err){ alert('読み込みに失敗しました：\n'+err.message); }
 };
 { const vb=$('#verBadge'); vb.textContent='ver.'+APP_VERSION; vb.title='学級編制アプリ ver.'+APP_VERSION+'（'+APP_UPDATED+' 更新）'; }
